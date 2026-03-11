@@ -11,10 +11,9 @@ export class Spawner extends Component {
 
     private currentCat: Node | null = null;
     private isWaiting: boolean = false;
-    private designWidth: number = 720; // 设计宽度
+    private designWidth: number = 720; 
 
     onEnable() {
-        console.log('Spawner: Simple Math Mode Active');
         input.on(Input.EventType.TOUCH_START, this.onTouchStart, this);
         input.on(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
         input.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
@@ -34,11 +33,10 @@ export class Spawner extends Component {
         input.off(Input.EventType.MOUSE_UP, this.onMouseUp, this);
     }
 
-    // 极其可靠的数学计算：(点击位置 / 屏幕总宽) * 设计宽度 - 偏移量
     private getXByMath(screenX: number): number {
-        const windowSize = screen.windowSize;
-        const ratio = screenX / windowSize.width;
-        // 映射到 -360 到 360 的区间
+        // 使用 view.getVisibleSize() 适配 3.7.4 的多分辨率
+        const visibleSize = view.getVisibleSize();
+        const ratio = screenX / screen.windowSize.width;
         return (ratio * this.designWidth) - (this.designWidth / 2);
     }
 
@@ -51,19 +49,34 @@ export class Spawner extends Component {
     onTouchEnd(event: EventTouch) { this.handleEnd(); }
 
     private handleStart(screenX: number) {
-        if (this.isWaiting || this.currentCat) return;
+        if (this.isWaiting) return;
+        // 如果当前已经有一只猫且它是有效的，不重复创建
+        if (this.currentCat && this.currentCat.isValid) return;
+        
         const x = this.getXByMath(screenX);
         this.createCat(x);
     }
 
     private handleMove(screenX: number) {
-        if (!this.currentCat) return;
+        // 关键修复：极致的有效性检查
+        if (!this.currentCat || !this.currentCat.isValid || !this.currentCat.parent) {
+            this.currentCat = null;
+            return;
+        }
+        
         const x = this.getXByMath(screenX);
-        this.currentCat.setPosition(new Vec3(x, this.currentCat.position.y, 0));
+        const currentPos = this.currentCat.position;
+        // 只有当坐标确实需要变动时才调用 setPosition
+        if (Math.abs(currentPos.x - x) > 0.1) {
+            this.currentCat.setPosition(x, currentPos.y, 0);
+        }
     }
 
     private handleEnd() {
-        if (!this.currentCat) return;
+        if (!this.currentCat || !this.currentCat.isValid) {
+            this.currentCat = null;
+            return;
+        }
         this.dropCat();
     }
 
@@ -77,38 +90,34 @@ export class Spawner extends Component {
             this.currentCat = instantiate(prefab);
             
             const rb = this.currentCat.getComponent(RigidBody2D);
-            if (rb) {
-                rb.type = ERigidBody2DType.Static;
-            }
+            if (rb) rb.type = 0; // Static
 
-            // 强制挂载到 Canvas 下
             const canvas = this.node.scene.getChildByPath('Canvas');
             if (canvas) {
                 canvas.addChild(this.currentCat);
-            } else {
-                this.node.parent?.addChild(this.currentCat);
             }
 
-            // 设置初始 Y 坐标，如果没设则默认为 500
-            const y = this.spawnPoint ? this.spawnPoint.position.y : 500;
-            this.currentCat.setPosition(new Vec3(x, y, 0));
-            
-            console.log(`Spawned at X: ${x.toFixed(2)}, Y: ${y}`);
+            // 获取安全高度
+            const y = (this.spawnPoint && this.spawnPoint.isValid) ? this.spawnPoint.position.y : 500;
+            this.currentCat.setPosition(x, y, 0);
         }
     }
 
     dropCat() {
-        if (!this.currentCat) return;
+        // 再次检查有效性
+        if (!this.currentCat || !this.currentCat.isValid) {
+            this.currentCat = null;
+            return;
+        }
 
         const rb = this.currentCat.getComponent(RigidBody2D);
         if (rb) {
-            rb.type = ERigidBody2DType.Dynamic;
+            rb.type = 2; // Dynamic
             rb.wakeUp(); 
-            console.log('Cat Dropped');
         }
 
-        this.currentCat = null;
+        this.currentCat = null; // 立即释放引用
         this.isWaiting = true;
-        this.scheduleOnce(() => { this.isWaiting = false; }, 0.8);
+        this.scheduleOnce(() => { this.isWaiting = false; }, 0.5);
     }
 }
