@@ -1,0 +1,28 @@
+# Cocos Creator
+library/
+temp/
+local/
+build/
+profiles/
+native/
+bin/
+*.log
+logs/
+.creator/
+.polygraph/
+
+# NPM
+node_modules/
+
+# VSCode
+.vscode/
+
+# JetBrains
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript
+tsconfig.tsbuildinfo
