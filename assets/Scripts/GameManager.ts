@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, PhysicsSystem2D, EPhysics2DDrawFlags, Vec2, log, Prefab, instantiate, Vec3, Label, director } from 'cc';
+import { _decorator, Component, Node, PhysicsSystem2D, EPhysics2DDrawFlags, Vec2, log, Prefab, instantiate, Vec3, Label, director, Color, Graphics, UITransform, Button, EventHandler } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('GameManager')
@@ -36,26 +36,17 @@ export class GameManager extends Component {
         PhysicsSystem2D.instance.enable = true;
         PhysicsSystem2D.instance.gravity = new Vec2(0, -960);
         
-        PhysicsSystem2D.instance.debugDrawFlags = EPhysics2DDrawFlags.Pair | 
-            EPhysics2DDrawFlags.CenterOfMass | 
-            EPhysics2DDrawFlags.Shape;
+        // 发布时关闭物理调试
+        PhysicsSystem2D.instance.debugDrawFlags = 0;
+
+        // 从本地读取历史最高分
+        this.highScore = Number(director.getScene()?.name === 'scene' ? localStorage.getItem('highestScore_Cat') : 0) || 0;
     }
 
     start() {
-        if (this.scoreLabel) {
-            console.log("[GameManager] Score Label linked successfully!");
-            this.scoreLabel.string = "0";
-        } else {
-            console.error("[GameManager] ERROR: Score Label is NOT linked in Inspector!");
-        }
-
-        if (this.highScoreLabel) {
-            this.highScoreLabel.string = "BEST: 0";
-        }
-        
-        if (this.gameOverPanel) {
-            this.gameOverPanel.active = false;
-        }
+        if (this.scoreLabel) this.scoreLabel.string = "0";
+        if (this.highScoreLabel) this.highScoreLabel.string = `BEST: ${this.highScore}`;
+        if (this.gameOverPanel) this.gameOverPanel.active = false;
     }
 
     public mergeCats(currentLevel: number, worldPos: Vec3) {
@@ -74,6 +65,12 @@ export class GameManager extends Component {
                 if (container) {
                     container.addChild(newNode);
                     newNode.setWorldPosition(worldPos);
+                    
+                    // 播放一个简单的缩放动画（如果是 3.7.4 支持 Tween 的话）
+                    newNode.setScale(new Vec3(0.1, 0.1, 1));
+                    this.scheduleOnce(() => {
+                        newNode.setScale(new Vec3(1, 1, 1));
+                    }, 0.05);
                 }
             }
         });
@@ -89,6 +86,7 @@ export class GameManager extends Component {
 
         if (this.currentScore > this.highScore) {
             this.highScore = this.currentScore;
+            localStorage.setItem('highestScore_Cat', this.highScore.toString());
             if (this.highScoreLabel) {
                 this.highScoreLabel.string = `BEST: ${this.highScore}`;
             }
@@ -99,15 +97,39 @@ export class GameManager extends Component {
         if (this.isGameOver) return;
         this.isGameOver = true;
         
+        console.warn("GAME OVER!");
+
+        // 停止物理模拟
+        PhysicsSystem2D.instance.enable = false;
+
+        // 显示结算面板
         if (this.gameOverPanel) {
             this.gameOverPanel.active = true;
+            // 尝试在面板里寻找显示最终分数的文本（可选）
+            const finalScoreLabel = this.gameOverPanel.getComponentInChildren(Label);
+            if (finalScoreLabel) {
+                finalScoreLabel.string = `游戏结束\n得分: ${this.currentScore}`;
+            }
+        } else {
+            // 如果你还没做面板，我用微信原生的弹窗提示你
+            if (window['wx']) {
+                window['wx'].showModal({
+                    title: '游戏结束',
+                    content: `你的得分是: ${this.currentScore}`,
+                    confirmText: '重新开始',
+                    showCancel: false,
+                    success: () => { this.restartGame(); }
+                });
+            } else {
+                alert(`Game Over! Score: ${this.currentScore}`);
+                this.restartGame();
+            }
         }
-        
-        console.error("GAME OVER!");
     }
 
     public restartGame() {
-        // 重启当前场景
+        console.log("Restarting...");
+        this.isGameOver = false;
         const sceneName = director.getScene()?.name || 'scene';
         director.loadScene(sceneName);
     }

@@ -30,9 +30,6 @@
         "__id__": 20
       },
       {
-        "__id__": 22
-      },
-      {
         "__id__": 24
       },
       {
@@ -375,7 +372,7 @@
     "__prefab": {
       "__id__": 16
     },
-    "_type": 0,
+    "_type": 1,
     "_inverted": false,
     "_segments": 64,
     "_alphaThreshold": 0.1,
