@@ -1,4 +1,6 @@
 import { _decorator, Component, Node, Prefab, instantiate, Vec3, input, Input, EventTouch, RigidBody2D, ERigidBody2DType, EventMouse, view, UITransform, screen, Graphics, Color, Vec2 } from 'cc';
+import { GameManager } from './GameManager';
+
 const { ccclass, property } = _decorator;
 
 @ccclass('Spawner')
@@ -78,7 +80,6 @@ export class Spawner extends Component {
     }
 
     update(dt: number) {
-        // 实现平滑跟随
         if (this.currentCat && this.currentCat.isValid && !this.isWaiting) {
             const currentPos = this.currentCat.position;
             const newX = currentPos.x + (this.targetX - currentPos.x) * 0.25;
@@ -92,7 +93,6 @@ export class Spawner extends Component {
         if (!this.guideLine) return;
         this.guideLine.node.active = true;
         this.guideLine.clear();
-        // 优化颜色：使用更柔和的半透明白色
         this.guideLine.strokeColor = new Color(255, 255, 255, 80);
         this.guideLine.lineWidth = 3;
 
@@ -142,12 +142,10 @@ export class Spawner extends Component {
         if (!this.currentCat || !this.currentCat.isValid) return;
         if (this.guideLine) this.guideLine.node.active = false;
 
-        // 下落重置连击
         if (GameManager.instance) GameManager.instance.resetCombo();
 
-        // 微信轻微震动
         if (typeof wx !== 'undefined') wx.vibrateShort({ type: 'light' });
-...
+
         const rb = this.currentCat.getComponent(RigidBody2D);
         if (rb) {
             rb.type = ERigidBody2DType.Dynamic;

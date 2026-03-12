@@ -3,22 +3,30 @@ import { GameManager } from './GameManager';
 
 const { ccclass, property } = _decorator;
 
-/**
- * 核心猫咪组件：负责碰撞逻辑与合成判定
- */
 @ccclass('Cat')
 export class Cat extends Component {
     @property({ tooltip: '猫咪等级 (1-10)' })
     public level: number = 1;
 
-    // 标志位：防止由于多次碰撞引发重复合成
     public isMerging: boolean = false;
 
+    // 缓存查找到的组件
     private _collider: Collider2D | null = null;
 
+    onLoad() {
+        // 核心修复：全路径搜索 Collider2D
+        this._collider = this.getComponent(Collider2D) || 
+                         this.getComponentInChildren(Collider2D) || 
+                         this.node.parent?.getComponent(Collider2D) || null;
+
+        if (this._collider) {
+            console.log(`[Cat] Lv${this.level} 已成功绑定碰撞体: ${this._collider.node.name}`);
+        } else {
+            console.error(`[Cat] Lv${this.level} 依然未找到 Collider2D！请手动检查预制体层级。`);
+        }
+    }
+
     onEnable() {
-        // 自动获取碰撞体，尝试从自身、子节点或父节点获取（适配预制体结构）
-        this._collider = this.getComponent(Collider2D) || this.node.getComponentInChildren(Collider2D);
         if (this._collider) {
             this._collider.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
         }
@@ -30,63 +38,65 @@ export class Cat extends Component {
         }
     }
 
-    private onBeginContact(selfCollider: Collider2D, otherCollider: Collider2D, contact: IPhysics2DContact | null) {
-        // 合成中或已销毁节点不再处理
-        if (this.isMerging || !this.node || !this.node.isValid) return;
+    private onBeginContact(self: Collider2D, other: Collider2D, contact: IPhysics2DContact | null) {
+        // 调试：只要有碰撞就打印
+        console.log(`[Collision] Lv${this.level} (${this.node.name}) 撞到了 ${other.node.name}`);
 
-        // 核心安全检查：获取自身刚体类型
-        const selfRB = this.node.getComponent(RigidBody2D);
-        if (!selfRB || selfRB.type !== ERigidBody2DType.Dynamic) return;
+        if (this.isMerging || !this.node.isValid) return;
 
-        const otherNode = otherCollider.node;
-        if (!otherNode || !otherNode.isValid) return;
+        // 获取对方的 Cat 组件 (全路径搜索)
+        const otherCat = other.node.getComponent(Cat) || 
+                         other.node.getComponentInChildren(Cat) || 
+                         other.node.parent?.getComponent(Cat);
+        
+        if (otherCat && otherCat.level === this.level && !otherCat.isMerging) {
+            // 获取双方刚体进行状态校验
+            const selfRB = this.getComponent(RigidBody2D) || this.getComponentInChildren(RigidBody2D) || this.node.parent?.getComponent(RigidBody2D);
+            const otherRB = other.node.getComponent(RigidBody2D) || other.node.getComponentInChildren(RigidBody2D) || other.node.parent?.getComponent(RigidBody2D);
 
-        // 获取对方组件，必须是相同等级的猫，且对方也得是下落状态
-        const otherCat = otherNode.getComponent(Cat) || otherNode.getComponentInChildren(Cat);
-        if (!otherCat || otherCat.isMerging || !otherCat.node || !otherCat.node.isValid) return;
-
-        const otherRB = otherNode.getComponent(RigidBody2D);
-        if (!otherRB || otherRB.type !== ERigidBody2DType.Dynamic) return;
-
-        if (otherCat.level === this.level) {
-            // 通过比较 UUID 确保在两个物体碰撞时，逻辑只执行一次
-            if (this.node.uuid < otherCat.node.uuid) {
-                this.isMerging = true;
-                otherCat.isMerging = true;
-
-                // 计算两个球的中心点，作为新猫生成的坐标
-                const posA = selfCollider.node.worldPosition;
-                const posB = otherCollider.node.worldPosition;
-                const midPos = new Vec3((posA.x + posB.x) / 2, (posA.y + posB.y) / 2, 0);
-
-                // 调用管理器执行合成
-                if (GameManager.instance) {
-                    GameManager.instance.mergeCats(this.level, midPos);
+            if (selfRB && otherRB && selfRB.type === ERigidBody2DType.Dynamic && otherRB.type === ERigidBody2DType.Dynamic) {
+                // UUID 排序确保单次合成
+                if (this.node.uuid < other.node.uuid) {
+                    this.executeMerge(otherCat, other.node.worldPosition);
                 }
-
-                // 物理状态立即清理，防止干扰后续模拟
-                this.prepareForDestroy();
-                otherCat.prepareForDestroy();
-
-                // 下一帧销毁，确保物理回调安全结束
-                this.scheduleOnce(() => {
-                    this.safeDestroyNode(this.node);
-                    this.safeDestroyNode(otherCat.node);
-                }, 0);
             }
         }
     }
 
-    private prepareForDestroy() {
+    private executeMerge(otherCat: Cat, otherWorldPos: Vec3) {
+        console.log(`[Merge] Lv${this.level} 合成中...`);
         this.isMerging = true;
+        otherCat.isMerging = true;
+
+        const posA = this.node.worldPosition;
+        const midPos = new Vec3((posA.x + otherWorldPos.x) / 2, (posA.y + otherWorldPos.y) / 2, 0);
+
+        if (GameManager.instance) {
+            GameManager.instance.mergeCats(this.level, midPos);
+        }
+
+        // 立即禁用物理逻辑，防止重复碰撞
+        if (this._collider) this._collider.enabled = false;
+        const otherCol = otherCat.getComponent(Collider2D) || otherCat.getComponentInChildren(Collider2D);
+        if (otherCol) otherCol.enabled = false;
+
         this.node.active = false;
-        
-        const rb = this.getComponent(RigidBody2D);
-        if (rb) rb.enabled = false;
+        otherCat.node.active = false;
+
+        this.scheduleOnce(() => {
+            // 彻底销毁节点及其所有层级
+            this.safeDestroy(this.node);
+            this.safeDestroy(otherCat.node);
+        }, 0);
     }
 
-    private safeDestroyNode(node: Node) {
+    private safeDestroy(node: Node) {
         if (!node || !node.isValid) return;
-        node.destroy();
+        // 如果挂载在特殊的预制体容器里，向上销毁一级
+        if (node.parent && (node.parent.name.includes('Cat') || node.parent.name.includes('New Node'))) {
+            node.parent.destroy();
+        } else {
+            node.destroy();
+        }
     }
 }
