@@ -68,26 +68,24 @@ export class GameManager extends Component {
         this.addScore(this.scoreTable[currentLevel - 1]);
         if (typeof wx !== 'undefined') wx.vibrateShort({ type: 'medium' });
 
-        this.scheduleOnce(() => {
-            const nextLevel = currentLevel + 1;
-            const nextPrefab = this.catPrefabs[nextLevel - 1];
+        const nextLevel = currentLevel + 1;
+        const nextPrefab = this.catPrefabs[nextLevel - 1];
 
-            if (nextPrefab) {
-                const newNode = instantiate(nextPrefab);
-                const container = this.catContainer || this.node.scene.getChildByName('Canvas');
+        if (nextPrefab) {
+            const newNode = instantiate(nextPrefab);
+            const container = this.catContainer || this.node.scene.getChildByName('Canvas');
+            
+            if (container) {
+                container.addChild(newNode);
+                newNode.setWorldPosition(worldPos);
                 
-                if (container) {
-                    container.addChild(newNode);
-                    newNode.setWorldPosition(worldPos);
-                    
-                    newNode.setScale(new Vec3(0, 0, 1));
-                    tween(newNode)
-                        .to(0.2, { scale: new Vec3(1.15, 1.15, 1) }, { easing: 'backOut' })
-                        .to(0.1, { scale: new Vec3(1, 1, 1) })
-                        .start();
-                }
+                newNode.setScale(new Vec3(0, 0, 1));
+                tween(newNode)
+                    .to(0.2, { scale: new Vec3(1.15, 1.15, 1) }, { easing: 'backOut' })
+                    .to(0.1, { scale: new Vec3(1, 1, 1) })
+                    .start();
             }
-        });
+        }
     }
 
     private showComboUI(count: number) {
