@@ -145,6 +145,9 @@ export class GameManager extends Component {
         if (this.gameOverPanel && this.gameOverPanel.isValid) {
             this.gameOverPanel.active = true;
             
+            // 强力保障：将面板移至最顶层，防止被猫咪或背景遮挡
+            this.gameOverPanel.setSiblingIndex(this.gameOverPanel.parent ? this.gameOverPanel.parent.children.length - 1 : 999);
+            
             // 查找专门命名的 Label 或寻找子节点中的分数 Label
             const labels = this.gameOverPanel.getComponentsInChildren(Label);
             const scoreDisplay = labels.find(l => l.node.name === 'FinalScoreLabel') || labels[1];

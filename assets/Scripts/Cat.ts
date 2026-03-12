@@ -39,6 +39,8 @@ export class Cat extends Component {
     }
 
     private onBeginContact(self: Collider2D, other: Collider2D, contact: IPhysics2DContact | null) {
+        if (!other || !other.node) return;
+        
         // 调试：只要有碰撞就打印
         console.log(`[Collision] Lv${this.level} (${this.node.name}) 撞到了 ${other.node.name}`);
 
@@ -75,15 +77,19 @@ export class Cat extends Component {
             GameManager.instance.mergeCats(this.level, midPos);
         }
 
-        // 立即禁用物理逻辑，防止重复碰撞
-        if (this._collider) this._collider.enabled = false;
-        const otherCol = otherCat.getComponent(Collider2D) || otherCat.getComponentInChildren(Collider2D);
-        if (otherCol) otherCol.enabled = false;
-
-        this.node.active = false;
-        otherCat.node.active = false;
-
         this.scheduleOnce(() => {
+            // 延迟禁用物理逻辑和节点，防止在物理步进中产生错误
+            if (this.node && this.node.isValid) {
+                if (this._collider) this._collider.enabled = false;
+                this.node.active = false;
+            }
+            
+            if (otherCat.node && otherCat.node.isValid) {
+                const otherCol = otherCat.getComponent(Collider2D) || otherCat.getComponentInChildren(Collider2D);
+                if (otherCol) otherCol.enabled = false;
+                otherCat.node.active = false;
+            }
+
             // 彻底销毁节点及其所有层级
             this.safeDestroy(this.node);
             this.safeDestroy(otherCat.node);

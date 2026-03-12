@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, input, Input, EventTouch, RigidBody2D, ERigidBody2DType, EventMouse, view, UITransform, screen, Graphics, Color, Vec2 } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, input, Input, EventTouch, RigidBody2D, ERigidBody2DType, EventMouse, view, UITransform, screen, Graphics, Color, Vec2, Collider2D } from 'cc';
 import { GameManager } from './GameManager';
 
 const { ccclass, property } = _decorator;
@@ -118,6 +118,11 @@ export class Spawner extends Component {
 
         if (prefab) {
             this.currentCat = instantiate(prefab);
+            
+            // 初始禁用碰撞体，防止在顶部时挤压下方堆叠的猫咪
+            const col = this.currentCat.getComponent(Collider2D) || this.currentCat.getComponentInChildren(Collider2D);
+            if (col) col.enabled = false;
+
             const rb = this.currentCat.getComponent(RigidBody2D);
             if (rb) {
                 rb.enabled = true;
@@ -145,6 +150,10 @@ export class Spawner extends Component {
         if (GameManager.instance) GameManager.instance.resetCombo();
 
         if (typeof wx !== 'undefined') wx.vibrateShort({ type: 'light' });
+
+        // 释放时开启碰撞体
+        const col = this.currentCat.getComponent(Collider2D) || this.currentCat.getComponentInChildren(Collider2D);
+        if (col) col.enabled = true;
 
         const rb = this.currentCat.getComponent(RigidBody2D);
         if (rb) {
