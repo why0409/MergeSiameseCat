@@ -92,6 +92,8 @@ export class GameManager extends Component {
         if (!this.comboLabel) return;
         const node = this.comboLabel.node;
         node.active = true;
+        // 确保连击提示在最顶层，不被猫咪遮挡
+        node.setSiblingIndex(node.parent ? node.parent.children.length - 1 : 999);
         this.comboLabel.string = `Combo x${count}`;
         Tween.stopAllByTarget(node);
         node.setScale(new Vec3(0.5, 0.5, 1));

@@ -49,11 +49,27 @@
 - [ ] **限时挑战模式**:
     - [ ] 引入倒计时或特殊重力场机制。
 
+### Stage 6: 深度体验优化 (Polish & Optimization) 🚀
+- [ ] **预测与规划 (Strategic)**:
+    - [ ] **“下一个”预览**：增加 UI 展示即将出现的猫咪等级。
+    - [ ] **逻辑重构**：由 `GameManager` 提前生成随机序列，支持玩家提前布局。
+- [ ] **节奏控制 (Pacing)**:
+    - [ ] **投掷冷却**：增加 0.5s-0.8s 的下落 CD，防止连点导致物理重叠。
+    - [ ] **动态 CD**：根据当前猫咪大小自动调整冷却动效。
+- [ ] **判定容错 (Forgiveness)**:
+    - [ ] **Deadline 缓刑**：实现“停留 3 秒判定”逻辑，而非触碰即死。
+    - [ ] **危机表现**：红线呼吸频率随堆积高度呈非线性加快。
+- [ ] **社交数据真实化 (Social Logic)**:
+    - [ ] **接管子域消息**：重写 `openDataContext/index.js`，接入 `wx.getFriendCloudStorage`。
+    - [ ] **本地分数回传**：在子域内实现主域传参分数的实时比对与渲染。
+
 ## 四、 维护与稳定性说明
 - **物理系统注意事项**：当前项目已升级至 3.8.5 LTS。物理引擎使用 Box2D。
     - **状态锁定处理**：严禁在碰撞回调 (`onBeginContact`) 中直接修改 Node 的 `active`、`scale` 或 RigidBody 的 `enabled` 状态。
-    - **视觉消除方案**：合成时采用 `setScale(0)` + `setWorldPosition(9999, 9999)` 的即时方案，并在 `scheduleOnce` (下一帧) 执行最终的 `destroy()`，彻底解决视觉残留与物理报错。
-    - **逻辑唯一性**：统一使用根节点的 `uuid` 进行排序，确保双向碰撞只触发单次合成逻辑。
+    - **视觉消除方案**：合成时采用 `setScale(0)` + `setWorldPosition(9999, 9999)` 的即时方案，并在 `scheduleOnce` (下一帧) 执行最终的 `destroy()`。
+- **UI 层级管理**：
+    - **层级竞争问题**：由于 `GameOverPanel` 在显示时会强制 `setSiblingIndex` 置顶，调用 `WeChatRank` 显示排行榜时必须同步执行 `rankPanel.setSiblingIndex` 操作，否则排行榜会被结算面板遮挡（表现为点击无反应）。
+- **逻辑唯一性**：统一使用根节点的 `uuid` 进行排序，确保双向碰撞只触发单次合成逻辑。
 
 ---
 **提交记录：** 
