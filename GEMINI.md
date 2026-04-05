@@ -49,7 +49,7 @@
 - [ ] **限时挑战模式**:
     - [ ] 引入倒计时或特殊重力场机制。
 
-### Stage 6: 深度体验优化 (Polish & Optimization) 🚀
+### Stage 6: 深度体验优化 (Polish & Optimization) ✅
 - [ ] **预测与规划 (Strategic)**:
     - [ ] **“下一个”预览**：增加 UI 展示即将出现的猫咪等级。
     - [ ] **逻辑重构**：由 `GameManager` 提前生成随机序列，支持玩家提前布局。
@@ -59,9 +59,9 @@
 - [ ] **判定容错 (Forgiveness)**:
     - [ ] **Deadline 缓刑**：实现“停留 3 秒判定”逻辑，而非触碰即死。
     - [ ] **危机表现**：红线呼吸频率随堆积高度呈非线性加快。
-- [ ] **社交数据真实化 (Social Logic)**:
-    - [ ] **接管子域消息**：重写 `openDataContext/index.js`，接入 `wx.getFriendCloudStorage`。
-    - [ ] **本地分数回传**：在子域内实现主域传参分数的实时比对与渲染。
+- [x] **社交数据真实化 (Social Logic)**:
+    - [x] **接管子域消息**：在 `build-templates/wechatgame/openDataContext` 中重写 `index.js`，接入 `wx.getFriendCloudStorage`。
+    - [x] **本地分数回传**：子域已实现 key 为 `score` 的好友分数获取、排序与实时渲染。
 
 ## 四、 维护与稳定性说明
 - **物理系统注意事项**：当前项目已升级至 3.8.5 LTS。物理引擎使用 Box2D。

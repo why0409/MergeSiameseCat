@@ -44,33 +44,41 @@ export class Spawner extends Component {
         input.off(Input.EventType.MOUSE_UP, this.onMouseUp, this);
     }
 
-    private getXByMath(screenX: number): number {
-        const ratio = screenX / screen.windowSize.width;
-        let x = (ratio * this.designWidth) - (this.designWidth / 2);
-        const limit = 320; 
-        return Math.max(-limit, Math.min(limit, x));
+    private getXByMath(event: EventTouch | EventMouse): number {
+        const uiLocation = event.getUILocation();
+        const canvas = this.node.scene.getChildByName('Canvas');
+        if (canvas) {
+            const uiTransform = canvas.getComponent(UITransform);
+            if (uiTransform) {
+                // 将点击的 UI 坐标转换为 Canvas 的本地坐标（锚点在中心）
+                const localPos = uiTransform.convertToNodeSpaceAR(new Vec3(uiLocation.x, uiLocation.y, 0));
+                const limit = 320; 
+                return Math.max(-limit, Math.min(limit, localPos.x));
+            }
+        }
+        return 0;
     }
 
-    onMouseDown(event: EventMouse) { this.handleStart(event.getLocationX()); }
-    onMouseMove(event: EventMouse) { this.handleMove(event.getLocationX()); }
+    onMouseDown(event: EventMouse) { this.handleStart(event); }
+    onMouseMove(event: EventMouse) { this.handleMove(event); }
     onMouseUp(event: EventMouse) { this.handleEnd(); }
-    onTouchStart(event: EventTouch) { this.handleStart(event.getLocationX()); }
-    onTouchMove(event: EventTouch) { this.handleMove(event.getLocationX()); }
+    onTouchStart(event: EventTouch) { this.handleStart(event); }
+    onTouchMove(event: EventTouch) { this.handleMove(event); }
     onTouchEnd(event: EventTouch) { this.handleEnd(); }
 
-    private handleStart(screenX: number) {
+    private handleStart(event: EventTouch | EventMouse) {
         if (this.isWaiting) return;
         this.isTouching = true;
-        this.targetX = this.getXByMath(screenX);
+        this.targetX = this.getXByMath(event);
         
         if (!this.currentCat || !this.currentCat.isValid) {
             this.createCat(this.targetX);
         }
     }
 
-    private handleMove(screenX: number) {
+    private handleMove(event: EventTouch | EventMouse) {
         if (!this.isTouching) return;
-        this.targetX = this.getXByMath(screenX);
+        this.targetX = this.getXByMath(event);
     }
 
     private handleEnd() {
