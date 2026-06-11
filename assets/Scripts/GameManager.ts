@@ -1,5 +1,6 @@
-import { _decorator, Component, Node, PhysicsSystem2D, EPhysics2DDrawFlags, Vec2, log, Prefab, instantiate, Vec3, Label, director, Color, Graphics, UITransform, Button, EventHandler, tween, Tween, UIOpacity } from 'cc';
+import { _decorator, Component, Node, PhysicsSystem2D, EPhysics2DDrawFlags, Vec2, log, Prefab, instantiate, Vec3, Label, director, Color, Graphics, UITransform, Button, EventHandler, tween, Tween, UIOpacity, find } from 'cc';
 import { WeChatRank } from './WeChatRank';
+import { Spawner } from './Spawner';
 
 const { ccclass, property } = _decorator;
 
@@ -20,11 +21,17 @@ export class GameManager extends Component {
     @property({ type: Label, tooltip: '历史最高分 Label' })
     public highScoreLabel: Label = null!;
 
+    @property({ type: Node, tooltip: '开始面板' })
+    public startPanel: Node = null!;
+
     @property({ type: Node, tooltip: '游戏结束面板' })
     public gameOverPanel: Node = null!;
 
     @property({ type: WeChatRank, tooltip: '微信排行榜组件' })
     public weChatRank: WeChatRank = null!;
+
+    @property({ type: Spawner, tooltip: '生成器组件' })
+    public spawner: Spawner = null!;
 
     @property({ type: Label, tooltip: '连击提示 Label' })
     public comboLabel: Label = null!;
@@ -39,6 +46,8 @@ export class GameManager extends Component {
 
     private comboCount: number = 0;
     private scoreTable: number[] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 1000];
+    // 本局是否刷新过纪录，等游戏结束时一次性上传云端，避免触发微信接口频率限制
+    private pendingCloudSync: boolean = false;
 
     onLoad() {
         GameManager._instance = this;
@@ -46,6 +55,46 @@ export class GameManager extends Component {
         PhysicsSystem2D.instance.gravity = new Vec2(0, -960);
         PhysicsSystem2D.instance.debugDrawFlags = 0;
         this.highScore = Number(director.getScene()?.name === 'scene' ? localStorage.getItem('highestScore_Cat') : 0) || 0;
+        
+        this.setupUI();
+    }
+
+    private setupUI() {
+        // 1. 处理排行榜关闭按钮的文字和位置
+        const closeBtnNode = find("Canvas/RankPanel/CloseButton");
+        if (closeBtnNode) {
+            const label = closeBtnNode.getComponentInChildren(Label);
+            if (label) {
+                label.string = "关闭";
+                label.fontSize = 30;
+            }
+            // 调整位置到下方
+            closeBtnNode.setPosition(0, -480, 0);
+            
+            // 确保按钮有点击事件（如果场景里没配好）
+            let btn = closeBtnNode.getComponent(Button);
+            if (btn && btn.clickEvents.length === 0) {
+                const eventHandler = new EventHandler();
+                eventHandler.target = this.weChatRank.node;
+                eventHandler.component = 'WeChatRank';
+                eventHandler.handler = 'hideFriendRank';
+                btn.clickEvents.push(eventHandler);
+            }
+        }
+
+        // 2. 如果没有动态创建 StartPanel，尝试寻找它（如果用户在编辑器里手动加了）
+        // 否则我们可以在这里用代码微调已有按钮
+        const startBtnNode = find("Canvas/StartButton"); // 假设用户可能放了一个按钮在 Canvas 下
+        if (startBtnNode) {
+            let btn = startBtnNode.getComponent(Button);
+            if (btn && btn.clickEvents.length === 0) {
+                const eventHandler = new EventHandler();
+                eventHandler.target = this.node;
+                eventHandler.component = 'GameManager';
+                eventHandler.handler = 'startGame';
+                btn.clickEvents.push(eventHandler);
+            }
+        }
     }
 
     start() {
@@ -53,6 +102,34 @@ export class GameManager extends Component {
         if (this.highScoreLabel) this.highScoreLabel.string = `BEST: ${this.highScore}`;
         if (this.gameOverPanel) this.gameOverPanel.active = false;
         if (this.comboLabel) this.comboLabel.node.active = false;
+        
+        // 确保开始面板在最前面并显示
+        if (this.startPanel) {
+            this.startPanel.active = true;
+            this.startPanel.setSiblingIndex(this.startPanel.parent ? this.startPanel.parent.children.length - 1 : 999);
+        } else {
+            // 如果没配 startPanel，但有 Spawner，我们需要某种方式开始
+            // 暂时保持现状，或者提醒用户
+            log("GameManager: startPanel is not assigned.");
+        }
+    }
+
+    /**
+     * 点击开始游戏按钮调用
+     */
+    public startGame() {
+        log("GameManager: startGame called");
+        if (this.startPanel) this.startPanel.active = false;
+        if (this.spawner) {
+            this.spawner.startGame();
+        } else {
+            // 自动寻找 Spawner
+            const spawnerNode = find("Canvas/Spawner");
+            if (spawnerNode) {
+                const spawner = spawnerNode.getComponent(Spawner);
+                if (spawner) spawner.startGame();
+            }
+        }
     }
 
     public resetCombo() {
@@ -124,13 +201,19 @@ export class GameManager extends Component {
         if (this.currentScore > this.highScore) {
             this.highScore = this.currentScore;
             localStorage.setItem('highestScore_Cat', this.highScore.toString());
-            if (typeof wx !== 'undefined') {
-                wx.setUserCloudStorage({
-                    KVDataList: [{ key: 'score', value: this.highScore.toString() }],
-                    success: () => { console.log('Score uploaded to WeChat'); }
-                });
-            }
+            this.pendingCloudSync = true;
             if (this.highScoreLabel) this.highScoreLabel.string = `BEST: ${this.highScore}`;
+        }
+    }
+
+    private syncScoreToCloud() {
+        if (!this.pendingCloudSync) return;
+        this.pendingCloudSync = false;
+        if (typeof wx !== 'undefined') {
+            wx.setUserCloudStorage({
+                KVDataList: [{ key: 'score', value: this.highScore.toString() }],
+                success: () => { console.log('Score uploaded to WeChat'); }
+            });
         }
     }
 
@@ -140,6 +223,7 @@ export class GameManager extends Component {
         
         console.warn("GAME OVER!");
         PhysicsSystem2D.instance.enable = false;
+        this.syncScoreToCloud();
 
         // 核心更新：如果存在面板，将其显示出来并更新里面的分数
         if (this.gameOverPanel && this.gameOverPanel.isValid) {

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3, input, Input, EventTouch, RigidBody2D, ERigidBody2DType, EventMouse, view, UITransform, screen, Graphics, Color, Vec2, Collider2D } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, input, Input, EventTouch, RigidBody2D, ERigidBody2DType, EventMouse, view, UITransform, screen, Graphics, Color, Vec2, Collider2D, Button } from 'cc';
 import { GameManager } from './GameManager';
 
 const { ccclass, property } = _decorator;
@@ -20,8 +20,15 @@ export class Spawner extends Component {
     private isTouching: boolean = false;
     private lastX: number = 0;
     private targetX: number = 0;
+    private isGameStarted: boolean = false;
 
     start() {
+        // 游戏启动时不自动生成猫咪，等待点击开始
+    }
+
+    public startGame() {
+        if (this.isGameStarted) return;
+        this.isGameStarted = true;
         this.targetX = (Math.random() - 0.5) * 400; 
         this.createCat(this.targetX);
     }
@@ -59,17 +66,60 @@ export class Spawner extends Component {
         return 0;
     }
 
-    onMouseDown(event: EventMouse) { this.handleStart(event); }
-    onMouseMove(event: EventMouse) { this.handleMove(event); }
-    onMouseUp(event: EventMouse) { this.handleEnd(); }
-    onTouchStart(event: EventTouch) { this.handleStart(event); }
-    onTouchMove(event: EventTouch) { this.handleMove(event); }
-    onTouchEnd(event: EventTouch) { this.handleEnd(); }
+    onMouseDown(event: EventMouse) { if (this.isPlayable()) this.handleStart(event); }
+    onMouseMove(event: EventMouse) { if (this.isPlayable()) this.handleMove(event); }
+    onMouseUp(event: EventMouse) { if (this.isPlayable()) this.handleEnd(); }
+    onTouchStart(event: EventTouch) { if (this.isPlayable()) this.handleStart(event); }
+    onTouchMove(event: EventTouch) { if (this.isPlayable()) this.handleMove(event); }
+    onTouchEnd(event: EventTouch) { if (this.isPlayable()) this.handleEnd(); }
+
+    /**
+     * 游戏已开始且未结束才响应输入
+     */
+    private isPlayable(): boolean {
+        return this.isGameStarted && !(GameManager.instance && GameManager.instance.isGameOver);
+    }
+
+    /**
+     * 判断触摸是否落在 UI 按钮或排行榜面板上，防止点击 UI 时穿透触发投掷
+     */
+    private isTouchBlocked(event: EventTouch | EventMouse): boolean {
+        // 排行榜面板打开期间整屏不响应投掷
+        const rankPanel = GameManager.instance?.weChatRank?.rankPanel;
+        if (rankPanel && rankPanel.activeInHierarchy) return true;
+
+        const uiPos = event.getUILocation();
+        const touchPoint = new Vec3(uiPos.x, uiPos.y, 0);
+        const canvas = this.node.scene.getChildByName('Canvas');
+        if (!canvas) return false;
+
+        const buttons = canvas.getComponentsInChildren(Button);
+        for (const btn of buttons) {
+            if (!btn.node.activeInHierarchy || !btn.interactable) continue;
+            const transform = btn.node.getComponent(UITransform);
+            if (!transform) continue;
+            const local = transform.convertToNodeSpaceAR(touchPoint);
+            if (local.x >= -transform.anchorX * transform.width &&
+                local.x <= (1 - transform.anchorX) * transform.width &&
+                local.y >= -transform.anchorY * transform.height &&
+                local.y <= (1 - transform.anchorY) * transform.height) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private handleStart(event: EventTouch | EventMouse) {
-        if (this.isWaiting) return;
-        this.isTouching = true;
+        if (this.isTouchBlocked(event)) {
+            this.isTouching = false;
+            return;
+        }
+
+        // 即使在冷却中，也记录最新的点击位置和触摸状态
         this.targetX = this.getXByMath(event);
+        this.isTouching = true;
+
+        if (this.isWaiting) return;
         
         if (!this.currentCat || !this.currentCat.isValid) {
             this.createCat(this.targetX);
@@ -77,13 +127,20 @@ export class Spawner extends Component {
     }
 
     private handleMove(event: EventTouch | EventMouse) {
-        if (!this.isTouching) return;
         this.targetX = this.getXByMath(event);
+        if (!this.isTouching) return;
     }
 
     private handleEnd() {
+        // 本次触摸起始于 UI（被拦截），不触发投掷
+        if (!this.isTouching) return;
         this.isTouching = false;
-        if (!this.currentCat || !this.currentCat.isValid || this.isWaiting) return;
+        if (this.isWaiting) return;
+        if (!this.currentCat || !this.currentCat.isValid) return;
+
+        // 瞬间同步位置并下落
+        this.currentCat.setPosition(this.targetX, this.currentCat.position.y, 0);
+        this.lastX = this.targetX; 
         this.dropCat();
     }
 
@@ -170,17 +227,13 @@ export class Spawner extends Component {
             rb.linearVelocity = new Vec2(0, -10); 
         }
 
-        const droppedX = this.lastX;
         this.currentCat = null;
         this.isWaiting = true;
 
         this.scheduleOnce(() => {
             this.isWaiting = false;
-            if (!this.isTouching) {
-                let nextX = droppedX;
-                if (Math.abs(nextX) < 60) nextX = nextX > 0 ? 100 : -100;
-                this.createCat(nextX);
-            }
+            // 冷却结束后，立即根据当前的 targetX（可能是冷却中点的）生成新猫咪
+            this.createCat(this.targetX);
         }, 0.4); 
     }
 }

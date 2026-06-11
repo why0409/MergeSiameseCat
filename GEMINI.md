@@ -69,10 +69,17 @@
     - **视觉消除方案**：合成时采用 `setScale(0)` + `setWorldPosition(9999, 9999)` 的即时方案，并在 `scheduleOnce` (下一帧) 执行最终的 `destroy()`。
 - **UI 层级管理**：
     - **层级竞争问题**：由于 `GameOverPanel` 在显示时会强制 `setSiblingIndex` 置顶，调用 `WeChatRank` 显示排行榜时必须同步执行 `rankPanel.setSiblingIndex` 操作，否则排行榜会被结算面板遮挡（表现为点击无反应）。
+    - **自动化配置**：`GameManager` 已集成 `setupUI()`，会在运行时自动查找 `Canvas/RankPanel/CloseButton` 并设置其文字为“关闭”及调整位置。
+- **开始游戏流程**：
+    - 游戏现在默认处于“等待开始”状态。
+    - **编辑器操作**：需在 `Canvas` 下手动创建一个 `StartPanel`，并将其拖入 `GameManager` 的 `startPanel` 属性中。
+    - 为面板上的按钮配置点击事件，指向 `GameManager.startGame()` 以正式启动物理掉落逻辑。
 - **逻辑唯一性**：统一使用根节点的 `uuid` 进行排序，确保双向碰撞只触发单次合成逻辑。
 
 ---
 **提交记录：** 
+*   **2026-06-11**：平衡性调整：压缩 Lv6-10 物理半径（140/170/200/240/300 → 130/155/175/200/230），解决高等级猫并排放不下（两只 Lv8 需 800px > 720px 屏宽）导致的合成困难；同步更新预制体碰撞半径、UITransform 尺寸及 CAT_DESIGN_GUIDE.md 规格表。
+*   **2026-06-11**：修复四项缺陷：① `Cat._getEntityRoot` 兼容 `CatContainer`/`catContainer` 两种命名，避免根节点误判导致合成失效或误删容器；② 游戏结束后 Spawner 不再响应输入（新增 `isPlayable` 判定）；③ 新增 UI 点击穿透防护（触摸落在按钮或排行榜面板上不触发投掷）；④ 云端分数改为游戏结束时一次性上传，规避 `setUserCloudStorage` 频率限制。
 *   **2026-03-13**：深度重构合成逻辑。修复了物理引擎步进锁定导致的 `is not a function` 和 `Can not active RigidBody` 报错；通过“物理急停+视觉位移”方案解决了合成时旧猫残留及下掉的乱象；增加了游戏结束后的合成阻断逻辑。
 *   **2026-03-12**：项目成功迁移至 Cocos Creator 3.8.5 (LTS) 版本...
 --- End of Document ---

@@ -48,10 +48,13 @@ export class Cat extends Component {
      */
     private _getEntityRoot(node: Node): Node {
         let curr = node;
-        // 向上查找，直到父节点是 Canvas 或 catContainer，或者没有父节点为止
-        while (curr.parent && 
-               curr.parent.name !== 'Canvas' && 
-               curr.parent.name !== 'catContainer' && 
+        // 向上查找，直到父节点是 Canvas 或 CatContainer，或者没有父节点为止
+        // 注意：Spawner 中容器命名为 'CatContainer'，此处必须同时兼容两种大小写，
+        // 否则根节点会被误判为容器本身，导致合成失效甚至误删整个容器
+        while (curr.parent &&
+               curr.parent.name !== 'Canvas' &&
+               curr.parent.name !== 'CatContainer' &&
+               curr.parent.name !== 'catContainer' &&
                curr.parent.name !== 'Scene') {
             curr = curr.parent;
         }
