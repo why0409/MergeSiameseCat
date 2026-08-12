@@ -6,13 +6,12 @@ const GameConfig = {
   wallPadding: 16,
   /**
    * 场地纵坐标（向下为正）
-   * - spawn 靠近顶部
-   * - deadline 在可玩区上半，堆叠可到达
-   * - floor 贴设计底，吃满竖向空间
+   * - spawn / 危险线在顶部投放区附近（同类玩法惯例）
+   * - floor 贴设计底
    */
-  spawnY: 200,
-  /** 实测堆叠高度约 y=590~700，线过靠上永远结束不了 */
-  deadlineY: 700,
+  spawnY: 160,
+  /** 危险线：投放点下方一点，不要画在屏幕正中 */
+  deadlineY: 300,
   floorY: 1260,
   spawnXLimit: 330,
 
@@ -27,10 +26,10 @@ const GameConfig = {
   scoreTable: [1, 2, 4, 8, 16, 32, 64, 128, 256, 1000],
   radii: [30, 50, 70, 90, 110, 130, 155, 175, 200, 230],
 
-  /** 越过危险线且非快速下落，持续该秒数结束 */
-  deadlineStableTime: 1.0,
-  /** vy 大于此值视为下落穿过，不预警 */
-  deadlineMaxFallVy: 140,
+  /** 越过危险线后持续该秒数结束 */
+  deadlineStableTime: 1.2,
+  /** 猫在场超过该秒数才参与危险判定（跳过刚投下穿过的阶段） */
+  deadlineMinLife: 0.7,
 
   storageKey: 'highestScore_Cat',
   cloudScoreKey: 'score',

@@ -20,6 +20,8 @@ function createBody(opts) {
     static: !!opts.static,
     held: !!opts.held,
     merging: false,
+    /** 已下落累计时间（held 时不增加），用于危险线忽略刚投下的猫 */
+    life: 0,
   };
   recomputeInvMass(b);
   return b;
