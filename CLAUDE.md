@@ -1,37 +1,107 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for AI assistants and developers working in this repository.
 
 ## Project Overview
 
-《合成大暹罗》(Merge Siamese Cat) — a WeChat mini-game built with **Cocos Creator 3.8.5 (LTS)** + TypeScript. Gameplay: 2D physics drop-and-merge (Suika-style) with 10 cat levels, WeChat cloud-storage leaderboard, combo system, and haptic feedback.
+《合成大暹罗》(Merge Siamese Cat) — WeChat mini-game: 2D drop-and-merge (Suika-style), 10 cat levels, combo, haptics, local high score, WeChat friend leaderboard.
 
-There are no CLI build/test commands. The project is built and run through the Cocos Creator 3.8.5 editor GUI (build target: WeChat Mini Game), then previewed/published via WeChat DevTools. `library/`, `temp/`, `build/` are editor-generated and gitignored. TypeScript is non-strict (see `tsconfig.json`).
+**There are two codepaths:**
 
-`GEMINI.md` is the original development blueprint (roadmap, milestones, maintenance notes, in Chinese) — keep it updated when making significant changes. `CAT_DESIGN_GUIDE.md` documents art specs for the 10 cat levels (1024×1024 1:1 JPEG, physics radii 30–230; the Lv6–10 curve was deliberately compressed so two Lv8 cats fit side by side in the 720-wide canvas — don't scale it back up without checking that constraint).
+| Path | Stack | When to use |
+|------|--------|-------------|
+| **`minigame/`（推荐）** | 原生微信小游戏 · Canvas 2D · 自研物理 · **无 Cocos** | 日常开发、预览、发布 |
+| 仓库根 `assets/` + Cocos | Cocos Creator **3.8.5** + TypeScript | 仅维护旧编辑器工程时 |
 
-## Architecture
+### 原生版（无 Cocos）
 
-All gameplay code lives in `assets/Scripts/` (5 files). Components are wired together via editor-assigned `@property` references on nodes in `assets/scene.scene`, with runtime `find("Canvas/...")` fallbacks in `GameManager.setupUI()`.
+```bash
+cd minigame
+node tools/preview-server.js    # 浏览器 http://127.0.0.1:7456/
+# 或：微信开发者工具 → 导入 minigame/ 目录
+```
 
-- **GameManager.ts** — singleton (`GameManager.instance`). Owns game state (`isGameOver`, score, combo), enables `PhysicsSystem2D` (gravity −960), spawns the merged next-level cat from `catPrefabs[]`, persists high score to `localStorage` (`highestScore_Cat`) and uploads it to WeChat cloud KV (`wx.setUserCloudStorage`, key `score`).
-- **Spawner.ts** — handles touch/mouse input. The held cat is a **Static** rigid body with its collider disabled, lerp-following the pointer X (clamped ±320 on a 720-design-width canvas); on release it becomes Dynamic, collider enabled, with a 0.4s cooldown before the next cat appears. New cats are added to `Canvas/CatContainer`.
-- **Cat.ts** — per-prefab merge logic via `BEGIN_CONTACT`. Same-level collisions resolve once by comparing entity-root `uuid`s (the lower uuid runs the merge). Each prefab is one of `assets/Prefabs/Cat_Lv1..Lv10`.
-- **Deadline.ts** — lose-condition line. A cat must sit *stable* (vertical velocity near 0) above the line for `limitTime` (2s) to trigger game over; fast-falling cats passing through don't count. Drives the flashing warning / solid-red effects.
-- **WeChatRank.ts** — main-domain side of the leaderboard. Shows `rankPanel` (contains a `SubContextView`) and posts `{command: 'showFriendRank'}` to the open data context.
-- **build-templates/wechatgame/openDataContext/index.js** — the open data context (子域) renderer. Fetches friend scores via `wx.getFriendCloudStorage({keyList: ['score']})`, sorts, and renders to the shared canvas. This folder is copied into the build by Cocos build templates — edit it here, not in `build/`.
+详见 [`minigame/README.md`](minigame/README.md)。
 
-All `wx.*` calls are guarded with `typeof wx !== 'undefined'` so the game stays runnable in the editor/browser preview.
+### Cocos 版（遗留）
 
-## Critical Constraints (hard-won fixes — do not regress)
+Build only via Cocos Creator 3.8.5 editor (WeChat Mini Game target). `library/`, `temp/`, `build/` are gitignored. TS non-strict.
 
-- **Never mutate physics state inside `onBeginContact`**: no changing `node.active`, `scale` for re-activation purposes, or `RigidBody2D.enabled` during the Box2D step — it throws `Can not active RigidBody` / `is not a function` errors. The established merge pattern in `Cat._startMergeSequence` is: synchronously `setScale(0)` + `setWorldPosition(9999, 9999)` to hide the pair, then `scheduleOnce(..., 0)` to destroy the nodes and spawn the next-level cat on the following frame.
-- **Re-check `GameManager.instance.isGameOver` inside deferred callbacks** before spawning merged cats — merges queued before game over must not resolve after it.
-- **UI sibling-index competition**: `GameOverPanel` force-tops itself via `setSiblingIndex` when shown, so anything that must appear above it (the rank panel in `WeChatRank.showFriendRank`, the combo label) must also call `setSiblingIndex` to the top when displayed — otherwise it renders behind the panel and clicks appear dead.
-- **Merge uniqueness**: a two-cat collision fires callbacks on both sides; only the side whose entity-root `uuid` is lower runs the merge. Entity root = the prefab-instance node found by walking up to `Canvas`/`CatContainer`.
+### Related docs
 
-## Editor-Side Setup Expectations
+| File | Purpose |
+|------|---------|
+| **CLAUDE.md** (this file) | Canonical project guide |
+| **minigame/README.md** | Native build / preview / publish |
+| **CAT_DESIGN_GUIDE.md** | Cat art specs (1024×1024, radii 30–230) |
 
-Some behavior depends on scene nodes configured by hand in the editor:
-- `Canvas/StartPanel` must exist and be assigned to `GameManager.startPanel`; its button calls `GameManager.startGame()` (the game boots in a "waiting to start" state and the Spawner ignores input until then).
-- `GameManager.setupUI()` auto-configures `Canvas/RankPanel/CloseButton` (sets text "关闭", repositions it, wires `hideFriendRank`) at runtime if its click events are empty.
+> `GEMINI.md` has been removed. Do not recreate it.
+
+### Design canvas
+
+- **720 × 1280** portrait.
+- Lv6–10 radii compressed so two Lv8 fit side-by-side on 720 width (130/155/175/200/230). Do not inflate without checking.
+
+---
+
+## Native architecture (`minigame/`)
+
+| File | Role |
+|------|------|
+| `game.js` | WeChat entry → `js/main.js` |
+| `js/config.js` | Gravity, radii, score table, theme colors, storage keys |
+| `js/physics.js` | Circle physics (walls + circle-circle); **held cats skip collision** |
+| `js/game.js` | State machine: loading → ready → playing → gameover / rank |
+| `js/renderer.js` | Canvas draw + UI hit areas (start / gameover / rank) |
+| `js/assets.js` | Load `images/cats/cat_1..10.jpeg` |
+| `js/storage.js` | `highestScore_Cat` local + `score` cloud; `onHide` flush |
+| `js/main.js` | Canvas, input, rAF loop (WeChat + browser) |
+| `openDataContext/` | Friend rank; Canvas fallback if no layout engine |
+| `tools/preview-server.js` | Local static server + browser bundle |
+
+### Critical constraints (native)
+
+1. Held cat: no circle collision until drop (mirrors old collider-disabled).
+2. Merge once per pair; remove both, spawn `level+1` at midpoint; max level 10.
+3. Deadline: body top above line (`y - r < deadlineY`) and `|vy|` small for **2s**.
+4. After game over: stop spawning; sync cloud score.
+5. UI hits use design-space buttons registered in `renderer.hitAreas`.
+6. Edit **`minigame/openDataContext`**, not any Cocos `build/` copy.
+
+---
+
+## Cocos architecture (legacy `assets/Scripts/`)
+
+| Script | Role |
+|--------|------|
+| **GameConfig.ts** | Shared constants + Siamese palette |
+| **GameManager.ts** | Singleton, score/combo, merge spawn, cloud |
+| **Spawner.ts** | Input, held Static, cooldown |
+| **Cat.ts** | BEGIN_CONTACT merge (uuid uniqueness) |
+| **Deadline.ts** | Stable-above-line lose condition |
+| **WeChatRank.ts** | Main-domain rank panel |
+| **SiameseUITheme.ts** | Runtime Graphics theme |
+
+### Critical constraints (Cocos — do not regress)
+
+1. Never mutate physics `active` / RB `enabled` inside `onBeginContact`.
+2. Merge: `setScale(0)` + move to (9999,9999), then `scheduleOnce(0)` destroy/spawn; re-check `isGameOver`.
+3. GameOver / Rank / Combo must `setSiblingIndex` to top when shown.
+4. Merge uniqueness: lower entity-root `uuid` only.
+5. Spawner cooldown must no-op when not playable; `onGameOver` unschedules.
+
+---
+
+## Storage keys (both paths)
+
+| Key | Where | Meaning |
+|-----|--------|---------|
+| `highestScore_Cat` | local / `wx.setStorage` | Local best |
+| `score` | `wx.setUserCloudStorage` | Friend rank |
+
+---
+
+## Prefer native for new work
+
+- New features (preview next cat, audio, ads): implement in **`minigame/`** first.
+- Keep Cocos tree only if you still ship that binary; otherwise treat as archive.

@@ -1,5 +1,6 @@
-import { _decorator, Component, Node, Contact2DType, Collider2D, IPhysics2DContact, RigidBody2D, Vec3, Vec2, Tween } from 'cc';
+import { _decorator, Component, Node, Contact2DType, Collider2D, IPhysics2DContact, Tween, Vec3 } from 'cc';
 import { GameManager } from './GameManager';
+import { GameConfig } from './GameConfig';
 
 const { ccclass, property } = _decorator;
 
@@ -61,18 +62,19 @@ export class Cat extends Component {
         return curr;
     }
 
-    private _onBeginContact(self: Collider2D, other: Collider2D, contact: IPhysics2DContact | null) {
+    private _onBeginContact(_self: Collider2D, other: Collider2D, _contact: IPhysics2DContact | null) {
         if (this.isMerging || !this.node.isValid || !other || !other.node || !other.node.isValid) return;
+        if (GameManager.instance?.isGameOver) return;
+        if (this.level >= GameConfig.maxLevel) return;
 
         const otherCat = this._findComponentSafe<Cat>(other.node, Cat);
-        
-        if (otherCat && 
-            otherCat !== this && 
-            otherCat.level === this.level && 
-            !otherCat.isMerging && 
+
+        if (otherCat &&
+            otherCat !== this &&
+            otherCat.level === this.level &&
+            !otherCat.isMerging &&
             otherCat.node.isValid) {
-            
-            // 使用根节点的 UUID 进行唯一性判定
+
             const myRoot = this._getEntityRoot(this.node);
             const otherRoot = this._getEntityRoot(otherCat.node);
 
@@ -94,8 +96,8 @@ export class Cat extends Component {
         // 这一步在物理回调中是安全的，且能立即生效
         myRoot.setScale(new Vec3(0, 0, 0));
         otherRoot.setScale(new Vec3(0, 0, 0));
-        
-        // 记录坐标用于生成新猫
+
+        // 记录坐标用于生成新猫（必须在位移前 clone）
         const posA = myRoot.worldPosition.clone();
         const posB = otherRoot.worldPosition.clone();
         const midPos = new Vec3((posA.x + posB.x) / 2, (posA.y + posB.y) / 2, 0);
@@ -106,12 +108,10 @@ export class Cat extends Component {
 
         // 3. 异步彻底清理
         this.scheduleOnce(() => {
-            // 核心修复：在生成新猫前，再次确认游戏是否已经结束
             if (GameManager.instance && !GameManager.instance.isGameOver) {
                 GameManager.instance.mergeCats(this.level, midPos);
             }
 
-            // 彻底销毁根节点
             if (myRoot.isValid) myRoot.destroy();
             if (otherRoot.isValid) otherRoot.destroy();
         }, 0);

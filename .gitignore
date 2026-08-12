@@ -26,3 +26,6 @@ Thumbs.db
 
 # TypeScript
 tsconfig.tsbuildinfo
+
+# 原生小游戏：浏览器预览打包产物（可 node tools/build-browser-bundle.js 再生）
+minigame/tools/browser-bundle.js

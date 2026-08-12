@@ -6,13 +6,34 @@ let __env = GameGlobal.wx || GameGlobal.tt || GameGlobal.swan;
 let sharedCanvas = __env.getSharedCanvas();
 let sharedContext = sharedCanvas.getContext('2d');
 
+/** 最近一次排行数据，viewport 变化时可重绘 */
+let lastDataList = [];
+
+/**
+ * 转义模板字符串，避免昵称中的引号/尖括号破坏子域 XML
+ */
+function escapeXml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+function safeScore(value) {
+    const n = parseInt(value, 10);
+    return Number.isFinite(n) ? n : 0;
+}
+
 /**
  * 绘图函数
  */
 function draw(dataList) {
+    lastDataList = dataList || [];
     Layout.clear();
-    // 渲染获取到的数据
-    const xml = template({ data: dataList });
+    const xml = template({ data: lastDataList });
     Layout.init(xml, style);
     Layout.layout(sharedContext);
 }
@@ -24,31 +45,27 @@ function fetchFriendData() {
     __env.getFriendCloudStorage({
         keyList: ['score'],
         success: (res) => {
-            console.log('OpenDataContext: getFriendCloudStorage success', res.data.length);
-            
-            // 提取数据并格式化
-            let data = res.data.map(user => {
+            console.log('OpenDataContext: getFriendCloudStorage success', (res.data || []).length);
+
+            let data = (res.data || []).map(user => {
                 let score = 0;
                 if (user.KVDataList && user.KVDataList.length > 0) {
-                    // 查找 key 为 'score' 的项
                     const scoreItem = user.KVDataList.find(kv => kv.key === 'score');
-                    score = parseInt(scoreItem ? scoreItem.value : '0');
+                    score = safeScore(scoreItem ? scoreItem.value : '0');
                 }
                 return {
-                    nickname: user.nickname,
-                    avatarUrl: user.avatarUrl,
+                    nickname: escapeXml(user.nickname || '好友'),
+                    avatarUrl: user.avatarUrl || '',
                     rankScore: score
                 };
             });
 
-            // 按分数从大到小排序
             data.sort((a, b) => b.rankScore - a.rankScore);
-
-            // 执行渲染
             draw(data);
         },
         fail: (err) => {
             console.error('OpenDataContext: getFriendCloudStorage fail', err);
+            draw([]);
         }
     });
 }
@@ -64,9 +81,11 @@ __env.onMessage(data => {
             width: data.width,
             height: data.height,
         });
-        // 收到视口更新后，如果已经有数据可以重绘，否则可以清空或绘制空列表
+        // 视口更新后用缓存数据重绘，避免白屏
+        if (lastDataList && lastDataList.length > 0) {
+            draw(lastDataList);
+        }
     } else if (data.command === 'showFriendRank') {
-        // 收到主域显示的命令，开始拉取真实数据
         fetchFriendData();
     }
 });

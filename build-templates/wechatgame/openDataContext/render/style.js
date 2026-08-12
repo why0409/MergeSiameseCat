@@ -1,3 +1,6 @@
+/**
+ * 暹罗猫主题：奶油底 + 巧克力字 + 金色点缀 + 蓝眼强调
+ */
 module.exports = {
     container: {
         width: '100%',
@@ -10,31 +13,31 @@ module.exports = {
         height: '10%',
         flexDirection: 'column',
         alignItems: 'center',
-        backgroundColor: '#f8f1e6', // 背景色调整为和游戏一致
-        borderBottomWidth: 0.5,
-        borderColor: 'rgba(0, 0, 0, 0.3)',
+        backgroundColor: '#f8f1e6',
+        borderBottomWidth: 1,
+        borderColor: 'rgba(212, 168, 75, 0.6)',
     },
 
     title: {
-        width: '10%',
+        width: '100%',
         height: '100%',
-        fontSize: 35,
+        fontSize: 34,
         lineHeight: 80,
         textAlign: 'center',
         fontWeight: 'bold',
-        color: '#5c4033',
+        color: '#452e27',
     },
 
     rankList: {
         width: '100%',
         height: '90%',
-        backgroundColor: '#ffffff',
+        backgroundColor: '#fffaf2',
     },
 
     list: {
         width: '100%',
         height: '88%',
-        backgroundColor: '#ffffff',
+        backgroundColor: '#fffaf2',
         marginTop: 10,
     },
 
@@ -43,13 +46,13 @@ module.exports = {
         height: '12%',
         lineHeight: 90,
         textAlign: 'center',
-        fontSize: 25,
-        color: 'rgba(0,0,0,0.5)',
+        fontSize: 24,
+        color: 'rgba(69, 46, 39, 0.55)',
         backgroundColor: '#f8f1e6',
     },
 
     listItem: {
-        backgroundColor: '#F7F7F7',
+        backgroundColor: '#f3ebe0',
         width: '100%',
         height: '10%',
         flexDirection: 'row',
@@ -58,7 +61,7 @@ module.exports = {
     },
 
     listItemOld: {
-       backgroundColor: '#ffffff',
+        backgroundColor: '#fffaf2',
     },
 
     listItemUserData: {
@@ -72,11 +75,11 @@ module.exports = {
     listItemScore: {
         width: '25%',
         height: 100,
-        fontSize: 33,
+        fontSize: 32,
         fontWeight: 'bold',
         lineHeight: 100,
         textAlign: 'center',
-        color: '#5c4033',
+        color: '#d4a84b',
     },
 
     listItemNum: {
@@ -84,13 +87,13 @@ module.exports = {
         height: 80,
         fontSize: 30,
         fontWeight: 'bold',
-        color: '#452E27',
+        color: '#5a9fd2',
         lineHeight: 100,
         textAlign: 'center',
     },
 
     listHeadImg: {
-        borderRadius: 35, // 圆形头像
+        borderRadius: 35,
         width: 70,
         height: 70,
     },
@@ -98,9 +101,9 @@ module.exports = {
     listItemName: {
         width: 210,
         height: 100,
-        fontSize: 30,
+        fontSize: 28,
         lineHeight: 100,
         marginLeft: 30,
-        color: '#452E27',
+        color: '#452e27',
     },
 };

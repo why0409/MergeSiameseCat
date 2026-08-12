@@ -1,15 +1,21 @@
-import { _decorator, Component, Node, PhysicsSystem2D, EPhysics2DDrawFlags, Vec2, log, Prefab, instantiate, Vec3, Label, director, Color, Graphics, UITransform, Button, EventHandler, tween, Tween, UIOpacity, find } from 'cc';
+import {
+    _decorator, Component, Node, PhysicsSystem2D, Vec2, log, Prefab, instantiate, Vec3,
+    Label, director, Button, EventHandler, tween, Tween, UIOpacity, find,
+} from 'cc';
 import { WeChatRank } from './WeChatRank';
 import { Spawner } from './Spawner';
+import { GameConfig } from './GameConfig';
+import { SiameseUITheme } from './SiameseUITheme';
 
 const { ccclass, property } = _decorator;
+const T = GameConfig.theme;
 
 @ccclass('GameManager')
 export class GameManager extends Component {
     private static _instance: GameManager = null!;
     public static get instance() { return this._instance; }
 
-    @property({ type: [Prefab], tooltip: '所有等级的猫咪预制体' })
+    @property({ type: [Prefab], tooltip: '所有等级的猫咪预制体（权威列表；Spawner 优先读这里）' })
     public catPrefabs: Prefab[] = [];
 
     @property({ type: Node, tooltip: '猫咪容器' })
@@ -45,35 +51,69 @@ export class GameManager extends Component {
     public isGameOver: boolean = false;
 
     private comboCount: number = 0;
-    private scoreTable: number[] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 1000];
-    // 本局是否刷新过纪录，等游戏结束时一次性上传云端，避免触发微信接口频率限制
     private pendingCloudSync: boolean = false;
+    private _onHideHandler: (() => void) | null = null;
 
     onLoad() {
         GameManager._instance = this;
+        SiameseUITheme.resetFlag();
+
         PhysicsSystem2D.instance.enable = true;
-        PhysicsSystem2D.instance.gravity = new Vec2(0, -960);
+        PhysicsSystem2D.instance.gravity = GameConfig.gravity.clone();
         PhysicsSystem2D.instance.debugDrawFlags = 0;
-        this.highScore = Number(director.getScene()?.name === 'scene' ? localStorage.getItem('highestScore_Cat') : 0) || 0;
-        
+
+        // 直接读本地最高分，不依赖场景名
+        const raw = localStorage.getItem(GameConfig.storageKey);
+        this.highScore = raw != null && raw !== '' ? (Number(raw) || 0) : 0;
+
         this.setupUI();
+        this.bindWeChatLifecycle();
+    }
+
+    onDestroy() {
+        this.unbindWeChatLifecycle();
+        if (GameManager._instance === this) {
+            GameManager._instance = null!;
+        }
+    }
+
+    private bindWeChatLifecycle() {
+        if (typeof wx === 'undefined') return;
+        this._onHideHandler = () => {
+            // 切后台时若有未上传的破纪录分，尝试补传
+            this.syncScoreToCloud();
+        };
+        try {
+            wx.onHide(this._onHideHandler);
+        } catch (_) { /* ignore */ }
+    }
+
+    private unbindWeChatLifecycle() {
+        if (typeof wx === 'undefined' || !this._onHideHandler) return;
+        try {
+            if (typeof wx.offHide === 'function') {
+                wx.offHide(this._onHideHandler);
+            }
+        } catch (_) { /* ignore */ }
+        this._onHideHandler = null;
     }
 
     private setupUI() {
-        // 1. 处理排行榜关闭按钮的文字和位置
-        const closeBtnNode = find("Canvas/RankPanel/CloseButton");
+        const canvas = find('Canvas');
+        if (canvas) SiameseUITheme.apply(canvas);
+
+        const closeBtnNode = find('Canvas/RankPanel/CloseButton');
         if (closeBtnNode) {
             const label = closeBtnNode.getComponentInChildren(Label);
             if (label) {
-                label.string = "关闭";
+                label.string = '关闭';
                 label.fontSize = 30;
+                label.color = T.buttonText;
             }
-            // 调整位置到下方
             closeBtnNode.setPosition(0, -480, 0);
-            
-            // 确保按钮有点击事件（如果场景里没配好）
+
             let btn = closeBtnNode.getComponent(Button);
-            if (btn && btn.clickEvents.length === 0) {
+            if (btn && btn.clickEvents.length === 0 && this.weChatRank) {
                 const eventHandler = new EventHandler();
                 eventHandler.target = this.weChatRank.node;
                 eventHandler.component = 'WeChatRank';
@@ -82,9 +122,7 @@ export class GameManager extends Component {
             }
         }
 
-        // 2. 如果没有动态创建 StartPanel，尝试寻找它（如果用户在编辑器里手动加了）
-        // 否则我们可以在这里用代码微调已有按钮
-        const startBtnNode = find("Canvas/StartButton"); // 假设用户可能放了一个按钮在 Canvas 下
+        const startBtnNode = find('Canvas/StartButton');
         if (startBtnNode) {
             let btn = startBtnNode.getComponent(Button);
             if (btn && btn.clickEvents.length === 0) {
@@ -98,33 +136,34 @@ export class GameManager extends Component {
     }
 
     start() {
-        if (this.scoreLabel) this.scoreLabel.string = "0";
-        if (this.highScoreLabel) this.highScoreLabel.string = `BEST: ${this.highScore}`;
+        if (this.scoreLabel) {
+            this.scoreLabel.string = '0';
+            this.scoreLabel.color = T.scoreText;
+        }
+        if (this.highScoreLabel) {
+            this.highScoreLabel.string = `BEST: ${this.highScore}`;
+            this.highScoreLabel.color = T.gold;
+        }
         if (this.gameOverPanel) this.gameOverPanel.active = false;
         if (this.comboLabel) this.comboLabel.node.active = false;
-        
-        // 确保开始面板在最前面并显示
+
         if (this.startPanel) {
             this.startPanel.active = true;
-            this.startPanel.setSiblingIndex(this.startPanel.parent ? this.startPanel.parent.children.length - 1 : 999);
+            this.startPanel.setSiblingIndex(
+                this.startPanel.parent ? this.startPanel.parent.children.length - 1 : 999,
+            );
         } else {
-            // 如果没配 startPanel，但有 Spawner，我们需要某种方式开始
-            // 暂时保持现状，或者提醒用户
-            log("GameManager: startPanel is not assigned.");
+            log('GameManager: startPanel is not assigned.');
         }
     }
 
-    /**
-     * 点击开始游戏按钮调用
-     */
     public startGame() {
-        log("GameManager: startGame called");
+        log('GameManager: startGame called');
         if (this.startPanel) this.startPanel.active = false;
         if (this.spawner) {
             this.spawner.startGame();
         } else {
-            // 自动寻找 Spawner
-            const spawnerNode = find("Canvas/Spawner");
+            const spawnerNode = find('Canvas/Spawner');
             if (spawnerNode) {
                 const spawner = spawnerNode.getComponent(Spawner);
                 if (spawner) spawner.startGame();
@@ -137,12 +176,14 @@ export class GameManager extends Component {
     }
 
     public mergeCats(currentLevel: number, worldPos: Vec3) {
-        if (this.isGameOver || currentLevel >= 10) return;
+        if (this.isGameOver || currentLevel >= GameConfig.maxLevel) return;
 
         this.comboCount++;
         if (this.comboCount > 1) this.showComboUI(this.comboCount);
 
-        this.addScore(this.scoreTable[currentLevel - 1]);
+        const scoreIdx = currentLevel - 1;
+        const points = GameConfig.scoreTable[scoreIdx] ?? 0;
+        this.addScore(points);
         if (typeof wx !== 'undefined') wx.vibrateShort({ type: 'medium' });
 
         const nextLevel = currentLevel + 1;
@@ -151,11 +192,11 @@ export class GameManager extends Component {
         if (nextPrefab) {
             const newNode = instantiate(nextPrefab);
             const container = this.catContainer || this.node.scene.getChildByName('Canvas');
-            
+
             if (container) {
                 container.addChild(newNode);
                 newNode.setWorldPosition(worldPos);
-                
+
                 newNode.setScale(new Vec3(0, 0, 1));
                 tween(newNode)
                     .to(0.2, { scale: new Vec3(1.15, 1.15, 1) }, { easing: 'backOut' })
@@ -169,22 +210,31 @@ export class GameManager extends Component {
         if (!this.comboLabel) return;
         const node = this.comboLabel.node;
         node.active = true;
-        // 确保连击提示在最顶层，不被猫咪遮挡
         node.setSiblingIndex(node.parent ? node.parent.children.length - 1 : 999);
         this.comboLabel.string = `Combo x${count}`;
-        Tween.stopAllByTarget(node);
-        node.setScale(new Vec3(0.5, 0.5, 1));
+        this.comboLabel.color = T.combo;
+
         const uiOpacity = node.getComponent(UIOpacity) || node.addComponent(UIOpacity);
+        // 必须同时停掉 node 与 opacity 上的旧 tween，避免连击竞态把透明度拉没
+        Tween.stopAllByTarget(node);
+        Tween.stopAllByTarget(uiOpacity);
+
+        node.setScale(new Vec3(0.5, 0.5, 1));
         uiOpacity.opacity = 255;
+
         tween(node)
             .to(0.15, { scale: new Vec3(1.5, 1.5, 1) }, { easing: 'backOut' })
             .to(0.1, { scale: new Vec3(1.2, 1.2, 1) })
             .delay(0.5)
             .call(() => {
-                tween(uiOpacity).to(0.3, { opacity: 0 }).call(() => {
-                    if (this.comboCount <= 1) node.active = false;
-                }).start();
-            }).start();
+                tween(uiOpacity)
+                    .to(0.3, { opacity: 0 })
+                    .call(() => {
+                        if (this.comboCount <= 1) node.active = false;
+                    })
+                    .start();
+            })
+            .start();
     }
 
     public addScore(points: number) {
@@ -192,6 +242,8 @@ export class GameManager extends Component {
         this.currentScore += points;
         if (this.scoreLabel) {
             this.scoreLabel.string = this.currentScore.toString();
+            Tween.stopAllByTarget(this.scoreLabel.node);
+            this.scoreLabel.node.setScale(new Vec3(1, 1, 1));
             tween(this.scoreLabel.node)
                 .to(0.08, { scale: new Vec3(1.3, 1.3, 1) })
                 .to(0.1, { scale: new Vec3(1, 1, 1) })
@@ -200,47 +252,69 @@ export class GameManager extends Component {
 
         if (this.currentScore > this.highScore) {
             this.highScore = this.currentScore;
-            localStorage.setItem('highestScore_Cat', this.highScore.toString());
+            localStorage.setItem(GameConfig.storageKey, this.highScore.toString());
             this.pendingCloudSync = true;
-            if (this.highScoreLabel) this.highScoreLabel.string = `BEST: ${this.highScore}`;
+            if (this.highScoreLabel) {
+                this.highScoreLabel.string = `BEST: ${this.highScore}`;
+            }
         }
     }
 
     private syncScoreToCloud() {
         if (!this.pendingCloudSync) return;
-        this.pendingCloudSync = false;
-        if (typeof wx !== 'undefined') {
-            wx.setUserCloudStorage({
-                KVDataList: [{ key: 'score', value: this.highScore.toString() }],
-                success: () => { console.log('Score uploaded to WeChat'); }
-            });
+        if (typeof wx === 'undefined') {
+            this.pendingCloudSync = false;
+            return;
         }
+        const value = this.highScore.toString();
+        // 先清标记，避免并发重复；失败时再置回
+        this.pendingCloudSync = false;
+        wx.setUserCloudStorage({
+            KVDataList: [{ key: GameConfig.cloudScoreKey, value }],
+            success: () => { console.log('Score uploaded to WeChat'); },
+            fail: (err: any) => {
+                console.warn('Score upload failed, will retry later', err);
+                this.pendingCloudSync = true;
+            },
+        });
     }
 
     public gameOver() {
         if (this.isGameOver) return;
         this.isGameOver = true;
-        
-        console.warn("GAME OVER!");
+
+        console.warn('GAME OVER!');
         PhysicsSystem2D.instance.enable = false;
+
+        // 清理生成器：取消冷却、销毁瞄准中的猫
+        if (this.spawner) {
+            this.spawner.onGameOver();
+        } else {
+            const spawnerNode = find('Canvas/Spawner');
+            spawnerNode?.getComponent(Spawner)?.onGameOver();
+        }
+
         this.syncScoreToCloud();
 
-        // 核心更新：如果存在面板，将其显示出来并更新里面的分数
         if (this.gameOverPanel && this.gameOverPanel.isValid) {
             this.gameOverPanel.active = true;
-            
-            // 强力保障：将面板移至最顶层，防止被猫咪或背景遮挡
-            this.gameOverPanel.setSiblingIndex(this.gameOverPanel.parent ? this.gameOverPanel.parent.children.length - 1 : 999);
-            
-            // 查找专门命名的 Label 或寻找子节点中的分数 Label
-            const labels = this.gameOverPanel.getComponentsInChildren(Label);
-            const scoreDisplay = labels.find(l => l.node.name === 'FinalScoreLabel') || labels[1];
+            this.gameOverPanel.setSiblingIndex(
+                this.gameOverPanel.parent ? this.gameOverPanel.parent.children.length - 1 : 999,
+            );
+
+            // 优先按节点名找 FinalScoreLabel，避免 labels[1] 顺序依赖
+            const finalNode = find('ContentBox/FinalScoreLabel', this.gameOverPanel)
+                || this.gameOverPanel.getChildByName('FinalScoreLabel');
+            let scoreDisplay: Label | null = finalNode?.getComponent(Label) ?? null;
+            if (!scoreDisplay) {
+                const labels = this.gameOverPanel.getComponentsInChildren(Label);
+                scoreDisplay = labels.find(l => l.node.name === 'FinalScoreLabel') || null;
+            }
             if (scoreDisplay) {
                 scoreDisplay.string = `最终得分: ${this.currentScore}`;
+                scoreDisplay.color = T.scoreText;
             }
-        } 
-        // 兜底方案：如果没有面板，依然使用微信弹窗
-        else if (typeof wx !== 'undefined') {
+        } else if (typeof wx !== 'undefined') {
             wx.showModal({
                 title: '游戏结束',
                 content: `最终得分: ${this.currentScore}`,
@@ -252,7 +326,7 @@ export class GameManager extends Component {
                     } else {
                         this.restartGame();
                     }
-                }
+                },
             });
         } else {
             alert(`Game Over! Score: ${this.currentScore}`);
