@@ -25,8 +25,11 @@ const GameConfig = {
   radii: [30, 50, 70, 90, 110, 130, 155, 175, 200, 230],
 
   deadlineStableTime: 1.5,
-  /** 停稳速度阈值：|v| 小于此才算堆在危险线上 */
-  deadlineSettleSpeed: 55,
+  /**
+   * 危险线：vy 超过此值视为「正在下落穿过」，不预警；
+   * vy 较小（堆叠/横移）则开始计时
+   */
+  deadlineSettleSpeed: 90,
 
   storageKey: 'highestScore_Cat',
   cloudScoreKey: 'score',

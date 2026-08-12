@@ -356,20 +356,21 @@ class Game {
   }
 
   _updateDeadline(dt) {
-    // 仅当猫「堆在危险线上方且几乎静止」才计时
-    // 下落穿过危险线（速度快）绝不预警，避免每次丢猫都闪红
+    // 危险：顶部越过线，且不是在快速下落
+    // 用 vy（向下为正）判断：快速下落不预警；横移/微抖仍可计时
     let danger = false;
-    const settle = GameConfig.deadlineSettleSpeed;
+    const maxFall = GameConfig.deadlineSettleSpeed; // 超过视为下落穿过
     for (let i = 0; i < this.world.bodies.length; i++) {
       const b = this.world.bodies[i];
       if (b.held || b.merging || b.static) continue;
       const top = b.y - b.r;
       if (top >= GameConfig.deadlineY) continue;
-      const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-      if (speed <= settle) {
-        danger = true;
-        break;
-      }
+      // 快速下落（vy 大）穿过红线：不预警
+      if (b.vy > maxFall) continue;
+      // 强制刹转，避免旋转视觉/数值干扰
+      b.omega = 0;
+      danger = true;
+      break;
     }
 
     if (danger) {
