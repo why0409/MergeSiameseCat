@@ -356,19 +356,22 @@ class Game {
   }
 
   _updateDeadline(dt) {
-    // 危险：顶部越过线，且不是在快速下落
-    // 用 vy（向下为正）判断：快速下落不预警；横移/微抖仍可计时
+    // 猫的顶部越过危险线，且不是快速下落 → 危险计时
     let danger = false;
-    const maxFall = GameConfig.deadlineSettleSpeed; // 超过视为下落穿过
+    let anyAbove = false;
+    const maxFall = GameConfig.deadlineMaxFallVy;
+
     for (let i = 0; i < this.world.bodies.length; i++) {
       const b = this.world.bodies[i];
       if (b.held || b.merging || b.static) continue;
       const top = b.y - b.r;
       if (top >= GameConfig.deadlineY) continue;
-      // 快速下落（vy 大）穿过红线：不预警
-      if (b.vy > maxFall) continue;
-      danger = true;
-      break;
+      anyAbove = true;
+      // 快速下落穿过：跳过；vy 不大（堆住/横移/微弹）算危险
+      if (b.vy <= maxFall) {
+        danger = true;
+        break;
+      }
     }
 
     if (danger) {
@@ -377,8 +380,12 @@ class Game {
       if (this.deadlineTimer >= GameConfig.deadlineStableTime) {
         this._gameOver();
       }
+    } else if (!anyAbove) {
+      // 完全离开危险区才清零；仅“正在穿过”时缓慢衰减
+      this.deadlineTimer = 0;
+      this.deadlineFlash = 0;
     } else {
-      this.deadlineTimer = Math.max(0, this.deadlineTimer - dt * 2.5);
+      this.deadlineTimer = Math.max(0, this.deadlineTimer - dt);
       if (this.deadlineTimer <= 0) this.deadlineFlash = 0;
     }
   }

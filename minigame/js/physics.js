@@ -65,7 +65,8 @@ class PhysicsWorld {
       b.y += b.vy * dt;
     }
 
-    for (let k = 0; k < 8; k++) {
+    // 多轮位置分离，减轻堆叠塌缩
+    for (let k = 0; k < 12; k++) {
       this._separateWalls();
       this._separateCircles();
     }
@@ -75,8 +76,8 @@ class PhysicsWorld {
     for (let i = 0; i < bodies.length; i++) {
       const b = bodies[i];
       if (b.static || b.held || b.merging) continue;
-      if (Math.abs(b.vx) < 2) b.vx = 0;
-      if (Math.abs(b.vy) < 2) b.vy = 0;
+      if (Math.abs(b.vx) < 3) b.vx = 0;
+      if (Math.abs(b.vy) < 3) b.vy = 0;
     }
   }
 
@@ -108,8 +109,8 @@ class PhysicsWorld {
   _separateCircles() {
     const bodies = this.bodies;
     const n = bodies.length;
-    const percent = 0.8;
-    const slop = 0.3;
+    const percent = 0.9;
+    const slop = 0.15;
 
     for (let i = 0; i < n; i++) {
       const a = bodies[i];

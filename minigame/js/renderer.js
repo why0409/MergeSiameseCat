@@ -20,16 +20,21 @@ class Renderer {
   }
 
   /**
-   * 适配屏幕：contain 设计分辨率
+   * 适配屏幕：优先铺满宽度，垂直居中偏下（底对齐倾向），减少底部大块留白
    */
   resize(screenW, screenH, dpr) {
     this.dpr = dpr || 1;
     const dw = GameConfig.designWidth;
     const dh = GameConfig.designHeight;
-    const scale = Math.min(screenW / dw, screenH / dh);
+    // 以宽度为准铺满；若高度不够再整体缩小（保证内容完整）
+    let scale = screenW / dw;
+    if (dh * scale > screenH) {
+      scale = screenH / dh;
+    }
     this.scale = scale;
     this.offsetX = (screenW - dw * scale) / 2;
-    this.offsetY = (screenH - dh * scale) / 2;
+    // 底对齐：多余竖向空间留在顶部（状态栏一侧），底部贴边
+    this.offsetY = Math.max(0, screenH - dh * scale);
 
     this.canvas.width = Math.floor(screenW * this.dpr);
     this.canvas.height = Math.floor(screenH * this.dpr);
@@ -156,14 +161,24 @@ class Renderer {
     const left = GameConfig.wallPadding;
     const right = GameConfig.designWidth - GameConfig.wallPadding;
     const floor = GameConfig.floorY;
-    // 底边
-    ctx.strokeStyle = 'rgba(69,46,39,0.25)';
+    const H = GameConfig.designHeight;
+
+    // 地面填充到底，吃满底部空间
+    ctx.fillStyle = T.ground || '#e8dcc8';
+    ctx.fillRect(0, floor, GameConfig.designWidth, H - floor);
+    ctx.fillStyle = 'rgba(69,46,39,0.08)';
+    ctx.fillRect(0, floor, GameConfig.designWidth, 8);
+
+    ctx.strokeStyle = 'rgba(69,46,39,0.35)';
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(left, floor);
     ctx.lineTo(right, floor);
     ctx.stroke();
-    // 侧墙细线
+
+    // 侧墙：从顶栏下到地面
+    ctx.strokeStyle = 'rgba(69,46,39,0.22)';
+    ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(left, 80);
     ctx.lineTo(left, floor);
@@ -173,7 +188,7 @@ class Renderer {
   }
 
   _drawDeadline(ctx, game) {
-    if (game.state === State.READY || game.state === State.LOADING) return;
+    if (game.state === State.READY || game.state === State.LOADING || game.state === State.GUIDE) return;
     const y = GameConfig.deadlineY;
     const warning = game.deadlineTimer > 0;
     const over = game.state === State.GAMEOVER;
@@ -191,8 +206,7 @@ class Renderer {
       ctx.lineWidth = 3;
       ctx.setLineDash([10, 8]);
     } else {
-      // 常显淡线，玩家知道危险位置
-      ctx.globalAlpha = 0.35;
+      ctx.globalAlpha = 0.45;
       ctx.strokeStyle = T.dangerSoft;
       ctx.lineWidth = 2;
       ctx.setLineDash([8, 10]);
@@ -202,12 +216,15 @@ class Renderer {
     ctx.lineTo(GameConfig.designWidth - GameConfig.wallPadding, y);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.globalAlpha = warning || over ? 0.9 : 0.4;
+    ctx.globalAlpha = warning || over ? 0.95 : 0.5;
     ctx.fillStyle = T.danger;
     ctx.font = '18px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(warning ? `危险 ${Math.max(0, GameConfig.deadlineStableTime - game.deadlineTimer).toFixed(1)}s` : '危险线', GameConfig.wallPadding + 8, y - 4);
+    const label = warning
+      ? `危险 ${Math.max(0, GameConfig.deadlineStableTime - game.deadlineTimer).toFixed(1)}s`
+      : '危险线';
+    ctx.fillText(label, GameConfig.wallPadding + 8, y - 4);
     ctx.restore();
   }
 

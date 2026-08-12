@@ -3,19 +3,22 @@ const GameConfig = {
   designWidth: 720,
   designHeight: 1280,
 
-  wallPadding: 20,
-  floorY: 1180,
-  /** 危险线 y（向下为正，越小越靠上） */
-  deadlineY: 250,
-  spawnY: 150,
-  spawnXLimit: 320,
+  wallPadding: 16,
+  /**
+   * 场地纵坐标（向下为正）
+   * - spawn 靠近顶部
+   * - deadline 在可玩区上半，堆叠可到达
+   * - floor 贴设计底，吃满竖向空间
+   */
+  spawnY: 200,
+  /** 实测堆叠高度约 y=590~700，线过靠上永远结束不了 */
+  deadlineY: 700,
+  floorY: 1260,
+  spawnXLimit: 330,
 
-  /** 重力（略慢于先前，更从容） */
   gravity: 2100,
-  restitution: 0.2,
+  restitution: 0.18,
   friction: 0.14,
-
-  /** 松手初速度（向下） */
   dropVy: 120,
 
   dropCooldown: 0.4,
@@ -24,12 +27,10 @@ const GameConfig = {
   scoreTable: [1, 2, 4, 8, 16, 32, 64, 128, 256, 1000],
   radii: [30, 50, 70, 90, 110, 130, 155, 175, 200, 230],
 
-  deadlineStableTime: 1.5,
-  /**
-   * 危险线：vy 超过此值视为「正在下落穿过」，不预警；
-   * vy 较小（堆叠/横移）则开始计时
-   */
-  deadlineSettleSpeed: 90,
+  /** 越过危险线且非快速下落，持续该秒数结束 */
+  deadlineStableTime: 1.0,
+  /** vy 大于此值视为下落穿过，不预警 */
+  deadlineMaxFallVy: 140,
 
   storageKey: 'highestScore_Cat',
   cloudScoreKey: 'score',
@@ -56,6 +57,7 @@ const GameConfig = {
     combo: '#d4643c',
     white: '#ffffff',
     guide: 'rgba(90,160,210,0.45)',
+    ground: '#e8dcc8',
   },
 };
 
