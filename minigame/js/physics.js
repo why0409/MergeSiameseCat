@@ -44,6 +44,14 @@ class PhysicsWorld {
     this.bodies = [];
   }
 
+  /** 屏幕布局变化后同步墙/地面 */
+  syncBounds() {
+    this.left = GameConfig.wallPadding;
+    this.right = GameConfig.designWidth - GameConfig.wallPadding;
+    this.floor = GameConfig.floorY;
+    this.gravity = GameConfig.gravity;
+  }
+
   add(body) {
     recomputeInvMass(body);
     this.bodies.push(body);

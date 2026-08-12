@@ -20,21 +20,24 @@ class Renderer {
   }
 
   /**
-   * 适配屏幕：优先铺满宽度，垂直居中偏下（底对齐倾向），减少底部大块留白
+   * 铺满全屏：宽度贴齐，高度随屏幕比例扩展（无上下大块 letterbox）
+   * @param {object} [layoutGame] 若传入 Game，会同步物理边界
    */
-  resize(screenW, screenH, dpr) {
+  resize(screenW, screenH, dpr, layoutGame) {
     this.dpr = dpr || 1;
-    const dw = GameConfig.designWidth;
-    const dh = GameConfig.designHeight;
-    // 以宽度为准铺满；若高度不够再整体缩小（保证内容完整）
-    let scale = screenW / dw;
-    if (dh * scale > screenH) {
-      scale = screenH / dh;
-    }
-    this.scale = scale;
-    this.offsetX = (screenW - dw * scale) / 2;
-    // 底对齐：多余竖向空间留在顶部（状态栏一侧），底部贴边
-    this.offsetY = Math.max(0, screenH - dh * scale);
+    const layout = GameConfig.applyScreenLayout(screenW, screenH);
+    const dw = layout.designWidth;
+    const dh = layout.designHeight;
+    // 设计坐标系已匹配屏幕比例 → 均匀缩放即可铺满
+    this.scale = layout.scale;
+    this.offsetX = 0;
+    this.offsetY = 0;
+
+    // 浮点误差时轻微居中
+    const drawnW = dw * this.scale;
+    const drawnH = dh * this.scale;
+    if (Math.abs(drawnW - screenW) > 1) this.offsetX = (screenW - drawnW) / 2;
+    if (Math.abs(drawnH - screenH) > 1) this.offsetY = (screenH - drawnH) / 2;
 
     this.canvas.width = Math.floor(screenW * this.dpr);
     this.canvas.height = Math.floor(screenH * this.dpr);
@@ -43,6 +46,10 @@ class Renderer {
       this.canvas.style.height = `${screenH}px`;
     }
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+
+    if (layoutGame && layoutGame.world && layoutGame.world.syncBounds) {
+      layoutGame.world.syncBounds();
+    }
   }
 
   /** 屏幕坐标 → 设计坐标 */
@@ -131,12 +138,12 @@ class Renderer {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
 
-    // 爪印装饰
+    // 爪印装饰（随高度分布）
     ctx.fillStyle = 'rgba(92,64,51,0.06)';
     this._paw(ctx, 80, 100, 16);
     this._paw(ctx, 640, 140, 14);
-    this._paw(ctx, 90, 1100, 18);
-    this._paw(ctx, 630, 1050, 15);
+    this._paw(ctx, 90, h * 0.85, 18);
+    this._paw(ctx, 630, h * 0.8, 15);
 
     // 顶金条
     ctx.fillStyle = 'rgba(212,168,75,0.18)';

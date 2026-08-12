@@ -146,7 +146,12 @@ function boot() {
 
   const layout = () => {
     const info = getSystemInfo();
-    renderer.resize(info.windowWidth, info.windowHeight, info.pixelRatio || 2);
+    renderer.resize(
+      info.windowWidth,
+      info.windowHeight,
+      info.pixelRatio || 2,
+      game,
+    );
   };
   layout();
   if (isWx && wx.onWindowResize) wx.onWindowResize(layout);
@@ -177,7 +182,14 @@ function boot() {
   };
   raf(tick);
 
-  console.log('[MergeSiameseCat]', GameConfig.designWidth, 'x', GameConfig.designHeight);
+  console.log(
+    '[MergeSiameseCat]',
+    GameConfig.designWidth,
+    'x',
+    GameConfig.designHeight,
+    'floor',
+    GameConfig.floorY,
+  );
 }
 
 boot();

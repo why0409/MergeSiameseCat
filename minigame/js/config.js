@@ -1,16 +1,16 @@
-/** 全局配置 */
+/** 全局配置（designHeight 会随屏幕比例动态拉高，铺满全屏） */
 const GameConfig = {
   designWidth: 720,
+  /** 基准高度；实际高度由 applyScreenLayout 按屏宽比扩展 */
   designHeight: 1280,
+  baseDesignHeight: 1280,
 
   wallPadding: 16,
   /**
    * 场地纵坐标（向下为正）
-   * - spawn / 危险线在顶部投放区附近（同类玩法惯例）
-   * - floor 贴设计底
+   * spawn / 危险线相对顶部固定；floor 贴实际 designHeight 底部
    */
   spawnY: 150,
-  /** 危险线：投放点下方一点（偏上） */
   deadlineY: 260,
   floorY: 1260,
   spawnXLimit: 330,
@@ -26,9 +26,7 @@ const GameConfig = {
   scoreTable: [1, 2, 4, 8, 16, 32, 64, 128, 256, 1000],
   radii: [30, 50, 70, 90, 110, 130, 155, 175, 200, 230],
 
-  /** 越过危险线后持续该秒数结束 */
   deadlineStableTime: 1.2,
-  /** 猫在场超过该秒数才参与危险判定（跳过刚投下穿过的阶段） */
   deadlineMinLife: 0.7,
 
   storageKey: 'highestScore_Cat',
@@ -59,5 +57,33 @@ const GameConfig = {
     ground: '#e8dcc8',
   },
 };
+
+/**
+ * 按屏幕尺寸扩展设计高度，使游戏内容铺满整屏（无上下大块 letterbox）
+ * 宽度固定 720 设计像素；高度 = 720 * (屏高/屏宽)
+ */
+function applyScreenLayout(screenW, screenH) {
+  const w = Math.max(1, screenW || 375);
+  const h = Math.max(1, screenH || 667);
+  // 与屏同比例的设计高度
+  let designH = Math.round(GameConfig.designWidth * (h / w));
+  // 合理范围，避免极端机型
+  if (designH < 1100) designH = 1100;
+  if (designH > 1800) designH = 1800;
+
+  GameConfig.designHeight = designH;
+  // 地面贴底；顶部投放区保持固定偏移
+  GameConfig.floorY = designH - 24;
+  GameConfig.spawnY = 150;
+  GameConfig.deadlineY = 260;
+
+  return {
+    designWidth: GameConfig.designWidth,
+    designHeight: designH,
+    scale: w / GameConfig.designWidth,
+  };
+}
+
+GameConfig.applyScreenLayout = applyScreenLayout;
 
 module.exports = GameConfig;
