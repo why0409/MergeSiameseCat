@@ -7,17 +7,9 @@ const { Game, State } = require('./game');
 const Renderer = require('./renderer');
 const assets = require('./assets');
 const audio = require('./audio');
+const { getDeviceLayout } = require('./device');
 
 const isWx = typeof wx !== 'undefined';
-
-function getSystemInfo() {
-  if (isWx && wx.getSystemInfoSync) return wx.getSystemInfoSync();
-  return {
-    windowWidth: window.innerWidth || 375,
-    windowHeight: window.innerHeight || 667,
-    pixelRatio: window.devicePixelRatio || 2,
-  };
-}
 
 function createCanvas() {
   if (isWx && wx.createCanvas) return wx.createCanvas();
@@ -145,13 +137,8 @@ function boot() {
   const renderer = new Renderer(canvas, ctx);
 
   const layout = () => {
-    const info = getSystemInfo();
-    renderer.resize(
-      info.windowWidth,
-      info.windowHeight,
-      info.pixelRatio || 2,
-      game,
-    );
+    const device = getDeviceLayout();
+    renderer.resize(device, game);
   };
   layout();
   if (isWx && wx.onWindowResize) wx.onWindowResize(layout);
@@ -183,12 +170,16 @@ function boot() {
   raf(tick);
 
   console.log(
-    '[MergeSiameseCat]',
-    GameConfig.designWidth,
-    'x',
-    GameConfig.designHeight,
+    '[MergeSiameseCat] layout',
+    GameConfig.designWidth + 'x' + GameConfig.designHeight,
+    'safe',
+    Math.round(GameConfig.safeTop) + '/' + Math.round(GameConfig.safeBottom),
+    'spawn',
+    Math.round(GameConfig.spawnY),
+    'deadline',
+    Math.round(GameConfig.deadlineY),
     'floor',
-    GameConfig.floorY,
+    Math.round(GameConfig.floorY),
   );
 }
 

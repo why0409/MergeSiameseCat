@@ -1,19 +1,25 @@
-/** 全局配置（designHeight 会随屏幕比例动态拉高，铺满全屏） */
+/** 全局配置（会随设备自动适配） */
 const GameConfig = {
   designWidth: 720,
-  /** 基准高度；实际高度由 applyScreenLayout 按屏宽比扩展 */
   designHeight: 1280,
   baseDesignHeight: 1280,
 
   wallPadding: 16,
-  /**
-   * 场地纵坐标（向下为正）
-   * spawn / 危险线相对顶部固定；floor 贴实际 designHeight 底部
-   */
   spawnY: 150,
   deadlineY: 260,
   floorY: 1260,
   spawnXLimit: 330,
+
+  /** 安全区（设计坐标，由 applyScreenLayout 写入） */
+  safeTop: 0,
+  safeBottom: 0,
+  safeLeft: 0,
+  safeRight: 0,
+  /** HUD 顶边（避开状态栏/胶囊） */
+  hudTop: 0,
+  hudHeight: 72,
+  /** 微信胶囊左缘（设计坐标），BEST 等勿越过 */
+  menuLeft: 720,
 
   gravity: 2100,
   restitution: 0.18,
@@ -59,28 +65,48 @@ const GameConfig = {
 };
 
 /**
- * 按屏幕尺寸扩展设计高度，使游戏内容铺满整屏（无上下大块 letterbox）
- * 宽度固定 720 设计像素；高度 = 720 * (屏高/屏宽)
+ * 根据设备信息自动适配设计坐标系
+ * @param {object} device getDeviceLayout() 返回值
  */
-function applyScreenLayout(screenW, screenH) {
-  const w = Math.max(1, screenW || 375);
-  const h = Math.max(1, screenH || 667);
-  // 与屏同比例的设计高度
-  let designH = Math.round(GameConfig.designWidth * (h / w));
-  // 合理范围，避免极端机型
-  if (designH < 1100) designH = 1100;
-  if (designH > 1800) designH = 1800;
+function applyScreenLayout(device) {
+  const w = Math.max(1, (device && device.windowWidth) || 375);
+  const h = Math.max(1, (device && device.windowHeight) || 667);
+  const scale = w / GameConfig.designWidth;
 
+  // 与屏幕同比例的设计高度 → 铺满竖屏
+  let designH = Math.round(GameConfig.designWidth * (h / w));
+  if (designH < 1100) designH = 1100;
+  if (designH > 1900) designH = 1900;
   GameConfig.designHeight = designH;
-  // 地面贴底；顶部投放区保持固定偏移
-  GameConfig.floorY = designH - 24;
-  GameConfig.spawnY = 150;
-  GameConfig.deadlineY = 260;
+
+  // 屏幕像素 → 设计坐标
+  const toDesign = (px) => (px || 0) / scale;
+
+  GameConfig.safeTop = toDesign(device.safeTopPx || 0);
+  GameConfig.safeBottom = toDesign(device.safeBottomPx || 0);
+  GameConfig.safeLeft = toDesign(device.safeLeftPx || 0);
+  GameConfig.safeRight = toDesign(device.safeRightPx || 0);
+  GameConfig.hudTop = toDesign(device.hudTopPx || 0);
+  GameConfig.menuLeft = toDesign(device.menuLeftPx != null ? device.menuLeftPx : w);
+
+  // HUD 高度随顶部安全区略增
+  GameConfig.hudHeight = 64 + Math.min(40, GameConfig.hudTop * 0.15);
+
+  // 投放点 / 危险线：在 HUD 下方
+  const topPad = GameConfig.hudTop + GameConfig.hudHeight;
+  GameConfig.spawnY = topPad + 70;
+  GameConfig.deadlineY = topPad + 160;
+
+  // 地面：贴底并避开 Home 指示条
+  GameConfig.floorY = designH - Math.max(20, GameConfig.safeBottom + 12);
+
+  // 左右墙可略吃进安全区
+  GameConfig.wallPadding = Math.max(12, GameConfig.safeLeft + 8);
 
   return {
     designWidth: GameConfig.designWidth,
     designHeight: designH,
-    scale: w / GameConfig.designWidth,
+    scale,
   };
 }
 

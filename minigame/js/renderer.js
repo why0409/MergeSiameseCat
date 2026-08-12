@@ -20,20 +20,22 @@ class Renderer {
   }
 
   /**
-   * 铺满全屏：宽度贴齐，高度随屏幕比例扩展（无上下大块 letterbox）
-   * @param {object} [layoutGame] 若传入 Game，会同步物理边界
+   * 按设备信息自动适配并铺满全屏
+   * @param {object} device getDeviceLayout() 结果
+   * @param {object} [layoutGame] Game 实例，同步物理边界
    */
-  resize(screenW, screenH, dpr, layoutGame) {
-    this.dpr = dpr || 1;
-    const layout = GameConfig.applyScreenLayout(screenW, screenH);
+  resize(device, layoutGame) {
+    const screenW = device.windowWidth;
+    const screenH = device.windowHeight;
+    this.dpr = device.pixelRatio || 2;
+
+    const layout = GameConfig.applyScreenLayout(device);
     const dw = layout.designWidth;
     const dh = layout.designHeight;
-    // 设计坐标系已匹配屏幕比例 → 均匀缩放即可铺满
     this.scale = layout.scale;
     this.offsetX = 0;
     this.offsetY = 0;
 
-    // 浮点误差时轻微居中
     const drawnW = dw * this.scale;
     const drawnH = dh * this.scale;
     if (Math.abs(drawnW - screenW) > 1) this.offsetX = (screenW - drawnW) / 2;
@@ -183,13 +185,14 @@ class Renderer {
     ctx.lineTo(right, floor);
     ctx.stroke();
 
-    // 侧墙：从顶栏下到地面
+    // 侧墙：从 HUD 下到地面
+    const wallTop = (GameConfig.hudTop || 0) + (GameConfig.hudHeight || 72);
     ctx.strokeStyle = 'rgba(69,46,39,0.22)';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(left, 80);
+    ctx.moveTo(left, wallTop);
     ctx.lineTo(left, floor);
-    ctx.moveTo(right, 80);
+    ctx.moveTo(right, wallTop);
     ctx.lineTo(right, floor);
     ctx.stroke();
   }
@@ -309,33 +312,49 @@ class Renderer {
   }
 
   _drawHud(ctx, game) {
-    // 顶栏
-    ctx.fillStyle = 'rgba(248,241,230,0.92)';
-    ctx.fillRect(0, 0, GameConfig.designWidth, 72);
+    const top = GameConfig.hudTop || 0;
+    const hh = GameConfig.hudHeight || 72;
+    const W = GameConfig.designWidth;
+
+    // 状态栏区域填充，与 HUD 一体
+    if (top > 0) {
+      ctx.fillStyle = 'rgba(248,241,230,0.98)';
+      ctx.fillRect(0, 0, W, top);
+    }
+
+    ctx.fillStyle = 'rgba(248,241,230,0.95)';
+    ctx.fillRect(0, top, W, hh);
     ctx.fillStyle = T.gold;
-    ctx.fillRect(0, 70, GameConfig.designWidth, 3);
+    ctx.fillRect(0, top + hh - 2, W, 3);
     ctx.beginPath();
-    ctx.arc(GameConfig.designWidth / 2, 71, 5, 0, Math.PI * 2);
+    ctx.arc(W / 2, top + hh - 1, 5, 0, Math.PI * 2);
     ctx.fillStyle = T.blueEye;
     ctx.fill();
 
+    const midY = top + hh / 2;
     ctx.fillStyle = T.chocolateMid;
-    ctx.font = 'bold 36px sans-serif';
+    ctx.font = 'bold 34px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(game.score), 28, 38);
+    ctx.fillText(String(game.score), 24 + (GameConfig.safeLeft || 0), midY);
 
+    // BEST 避开右侧胶囊
+    const menuLeft = GameConfig.menuLeft || W;
+    const bestRight = Math.min(W - 80, menuLeft - 16);
     ctx.fillStyle = T.gold;
-    ctx.font = '22px sans-serif';
+    ctx.font = '20px sans-serif';
     ctx.textAlign = 'right';
-    // 右侧给设置按钮留空
-    ctx.fillText(`BEST: ${game.highScore}`, GameConfig.designWidth - 88, 38);
+    ctx.fillText(`BEST: ${game.highScore}`, bestRight, midY);
   }
 
   _drawHudSettingsBtn(ctx) {
-    const x = GameConfig.designWidth - 64;
-    const y = 12;
-    const s = 48;
+    const top = GameConfig.hudTop || 0;
+    const hh = GameConfig.hudHeight || 72;
+    const s = 44;
+    // 放在 HUD 内、胶囊左侧
+    const menuLeft = GameConfig.menuLeft || GameConfig.designWidth;
+    const x = Math.min(GameConfig.designWidth - s - 12, menuLeft - s - 12);
+    const y = top + (hh - s) / 2;
     this.hitAreas.btn_settings_hud = { x, y, w: s, h: s };
     ctx.fillStyle = 'rgba(232,196,140,0.95)';
     this._roundRect(ctx, x, y, s, s, 12);
@@ -349,13 +368,13 @@ class Renderer {
     ctx.strokeStyle = T.chocolate;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
     ctx.stroke();
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
       ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * 10, cy + Math.sin(a) * 10);
-      ctx.lineTo(cx + Math.cos(a) * 15, cy + Math.sin(a) * 15);
+      ctx.moveTo(cx + Math.cos(a) * 9, cy + Math.sin(a) * 9);
+      ctx.lineTo(cx + Math.cos(a) * 14, cy + Math.sin(a) * 14);
       ctx.stroke();
     }
   }
@@ -572,7 +591,7 @@ class Renderer {
     const tw = 520;
     const th = 56;
     const x = (GameConfig.designWidth - tw) / 2;
-    const y = 100;
+    const y = (GameConfig.hudTop || 0) + (GameConfig.hudHeight || 72) + 12;
     ctx.fillStyle = 'rgba(69,46,39,0.78)';
     this._roundRect(ctx, x, y, tw, th, 16);
     ctx.fill();
