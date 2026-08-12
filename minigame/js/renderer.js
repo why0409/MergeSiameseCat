@@ -383,10 +383,7 @@ class Renderer {
     ctx.fillStyle = T.overlay;
     ctx.fillRect(0, 0, GameConfig.designWidth, GameConfig.designHeight);
 
-    const cw = 560;
-    const ch = 520;
-    const cx = (GameConfig.designWidth - cw) / 2;
-    const cy = 340;
+    const { cx, cy, cw, ch } = this._panelBox(560, 520);
     this._drawCard(ctx, cx, cy, cw, ch);
 
     ctx.fillStyle = T.chocolate;
@@ -477,6 +474,25 @@ class Renderer {
     ctx.closePath();
   }
 
+  /**
+   * 弹窗在当前 design 坐标系内水平+垂直居中
+   * （designHeight 会随设备变化，不能写死 cy）
+   */
+  _panelBox(cw, ch) {
+    const W = GameConfig.designWidth;
+    const H = GameConfig.designHeight;
+    const margin = 24;
+    const topMin = Math.max(margin, (GameConfig.hudTop || 0) + 8);
+    const bottomMax = H - margin;
+    let useH = Math.min(ch, bottomMax - topMin);
+    if (useH < 200) useH = Math.min(ch, H - margin * 2);
+    const cx = (W - cw) / 2;
+    let cy = (H - useH) / 2;
+    if (cy < topMin) cy = topMin;
+    if (cy + useH > bottomMax) cy = Math.max(topMin, bottomMax - useH);
+    return { cx, cy, cw, ch: useH };
+  }
+
   _drawCard(ctx, x, y, w, h) {
     // shadow
     ctx.fillStyle = 'rgba(40,28,24,0.2)';
@@ -560,10 +576,7 @@ class Renderer {
     ctx.fillStyle = T.overlay;
     ctx.fillRect(0, 0, GameConfig.designWidth, GameConfig.designHeight);
 
-    const cw = 560;
-    const ch = 720;
-    const cx = (GameConfig.designWidth - cw) / 2;
-    const cy = 240;
+    const { cx, cy, cw, ch } = this._panelBox(560, 720);
     this._drawCard(ctx, cx, cy, cw, ch);
     this._drawTitleBadge(ctx, GameConfig.designWidth / 2, cy + 120);
 
@@ -612,10 +625,7 @@ class Renderer {
     const total = pages.length;
     const idx = game.guidePage;
 
-    const cw = 600;
-    const ch = 820;
-    const cx = (GameConfig.designWidth - cw) / 2;
-    const cy = 180;
+    const { cx, cy, cw, ch } = this._panelBox(600, 820);
     this._drawCard(ctx, cx, cy, cw, ch);
 
     ctx.fillStyle = T.chocolate;
@@ -816,10 +826,7 @@ class Renderer {
     ctx.fillStyle = T.overlay;
     ctx.fillRect(0, 0, GameConfig.designWidth, GameConfig.designHeight);
 
-    const cw = 520;
-    const ch = 620;
-    const cx = (GameConfig.designWidth - cw) / 2;
-    const cy = 280;
+    const { cx, cy, cw, ch } = this._panelBox(520, 620);
     this._drawCard(ctx, cx, cy, cw, ch);
 
     ctx.fillStyle = T.chocolate;
@@ -845,22 +852,21 @@ class Renderer {
     ctx.fillStyle = T.overlay;
     ctx.fillRect(0, 0, GameConfig.designWidth, GameConfig.designHeight);
 
-    const cw = 600;
-    const ch = 980;
-    const cx = (GameConfig.designWidth - cw) / 2;
-    const cy = 120;
+    // 排行榜卡片略高，仍垂直居中
+    const box = this._panelBox(600, Math.min(980, GameConfig.designHeight - 80));
+    const { cx, cy, cw, ch } = box;
     this._drawCard(ctx, cx, cy, cw, ch);
 
     // 与子域 540×800 等比绘制，避免头像被压扁
     const maxW = cw - 40;
-    const maxH = 780;
+    const maxH = Math.max(400, ch - 120);
     const fit = Math.min(maxW / RANK_LOGIC_W, maxH / RANK_LOGIC_H);
     const listW = Math.floor(RANK_LOGIC_W * fit);
     const listH = Math.floor(RANK_LOGIC_H * fit);
     const listX = cx + Math.floor((cw - listW) / 2);
-    const listY = cy + 28 + Math.floor((maxH - listH) / 2);
+    const listY = cy + 28 + Math.max(0, Math.floor((maxH - listH) / 2));
 
-    this.hitAreas.rank_panel = { x: cx, y: cy, w: cw, h: ch - 90 };
+    this.hitAreas.rank_panel = { x: cx, y: cy, w: cw, h: Math.max(120, ch - 90) };
     this.hitAreas.rank_list = { x: listX, y: listY, w: listW, h: listH };
 
     ctx.fillStyle = 'rgba(255,250,242,0.98)';
@@ -887,7 +893,7 @@ class Renderer {
       ctx.fillText('排行榜加载中…', GameConfig.designWidth / 2, listY + listH * 0.5);
     }
 
-    this._drawButton(ctx, 'btn_close_rank', cx + 150, cy + 860, 300, 64, '关闭', false);
+    this._drawButton(ctx, 'btn_close_rank', cx + (cw - 300) / 2, cy + ch - 80, 300, 64, '关闭', false);
   }
 }
 
