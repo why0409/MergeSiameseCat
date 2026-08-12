@@ -74,6 +74,7 @@ function bindInput(canvas, renderer, game) {
 
     if (hit === 'btn_start') game.startPlay();
     else if (hit === 'btn_restart') game.restart();
+    else if (hit === 'btn_home') game.goHome();
     else if (hit === 'btn_rank') game.openRank();
     else if (hit === 'btn_close_rank') game.closeRank();
     else if (hit === 'btn_help') game.openGuide({ from: State.READY, startAfter: false });

@@ -9,9 +9,9 @@ const GameConfig = {
    * - spawn / 危险线在顶部投放区附近（同类玩法惯例）
    * - floor 贴设计底
    */
-  spawnY: 160,
-  /** 危险线：投放点下方一点，不要画在屏幕正中 */
-  deadlineY: 300,
+  spawnY: 150,
+  /** 危险线：投放点下方一点（偏上） */
+  deadlineY: 260,
   floorY: 1260,
   spawnXLimit: 330,
 

@@ -791,26 +791,28 @@ class Renderer {
     ctx.fillRect(0, 0, GameConfig.designWidth, GameConfig.designHeight);
 
     const cw = 520;
-    const ch = 520;
+    const ch = 620;
     const cx = (GameConfig.designWidth - cw) / 2;
-    const cy = 340;
+    const cy = 280;
     this._drawCard(ctx, cx, cy, cw, ch);
 
     ctx.fillStyle = T.chocolate;
     ctx.font = 'bold 42px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('本局结束', GameConfig.designWidth / 2, cy + 100);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('本局结束', GameConfig.designWidth / 2, cy + 80);
 
     ctx.fillStyle = T.chocolateMid;
     ctx.font = '32px sans-serif';
-    ctx.fillText(`最终得分: ${game.finalScore}`, GameConfig.designWidth / 2, cy + 180);
+    ctx.fillText(`最终得分: ${game.finalScore}`, GameConfig.designWidth / 2, cy + 160);
 
     ctx.fillStyle = T.gold;
     ctx.font = '24px sans-serif';
-    ctx.fillText(`BEST: ${game.highScore}`, GameConfig.designWidth / 2, cy + 230);
+    ctx.fillText(`BEST: ${game.highScore}`, GameConfig.designWidth / 2, cy + 210);
 
-    this._drawButton(ctx, 'btn_restart', cx + 80, cy + 300, 360, 72, '再来一局', true);
-    this._drawButton(ctx, 'btn_rank', cx + 80, cy + 400, 360, 64, '好友排行', false);
+    this._drawButton(ctx, 'btn_restart', cx + 80, cy + 280, 360, 68, '再来一局', true);
+    this._drawButton(ctx, 'btn_home', cx + 80, cy + 365, 360, 60, '回到首页', false);
+    this._drawButton(ctx, 'btn_rank', cx + 80, cy + 440, 360, 60, '好友排行', false);
   }
 
   _drawRankOverlay(ctx, game) {

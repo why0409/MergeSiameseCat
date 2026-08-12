@@ -496,6 +496,14 @@ class Game {
   restart() {
     this.startPlay();
   }
+
+  /** 结算后回到首页 */
+  goHome() {
+    this.pointerDown = false;
+    this._rankScrolling = false;
+    this.resetMatch();
+    this.state = State.READY;
+  }
 }
 
 module.exports = { Game, State, RANK_LOGIC_W, RANK_LOGIC_H, GUIDE_PAGES };
