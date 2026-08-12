@@ -1,7 +1,6 @@
 /**
- * 轻量圆盘 2D 物理
- * 旋转：仅撞击时给短脉冲，随后快速衰减；静止后强制 omega=0
- * （持续滚动耦合会导致堆叠时永不消转，进而拖死危险线判定）
+ * 轻量圆盘 2D 物理（仅平移，无旋转）
+ * 位置修正与速度冲量分开
  */
 const GameConfig = require('./config');
 
@@ -14,8 +13,6 @@ function createBody(opts) {
     y: opts.y,
     vx: opts.vx || 0,
     vy: opts.vy || 0,
-    angle: opts.angle || 0,
-    omega: opts.omega || 0,
     r: opts.r,
     level: opts.level,
     mass: Math.max(0.6, (opts.r * opts.r) / 900),
@@ -66,7 +63,6 @@ class PhysicsWorld {
       b.vy += g * dt;
       b.x += b.vx * dt;
       b.y += b.vy * dt;
-      b.angle += b.omega * dt;
     }
 
     for (let k = 0; k < 8; k++) {
@@ -75,7 +71,13 @@ class PhysicsWorld {
     }
 
     this._resolveVelocities();
-    this._finishMotion();
+
+    for (let i = 0; i < bodies.length; i++) {
+      const b = bodies[i];
+      if (b.static || b.held || b.merging) continue;
+      if (Math.abs(b.vx) < 2) b.vx = 0;
+      if (Math.abs(b.vy) < 2) b.vy = 0;
+    }
   }
 
   _inv(b) {
@@ -150,25 +152,18 @@ class PhysicsWorld {
     const left = this.left;
     const right = this.right;
 
-    // 墙 / 地面：只用平移速度，不维护滚动耦合
     for (let i = 0; i < bodies.length; i++) {
       const b = bodies[i];
       if (b.static || b.held || b.merging) continue;
 
       if (b.x - b.r <= left + 0.5 && b.vx < 0) {
         b.vx = -b.vx * rest;
-        b.omega *= 0.5;
       } else if (b.x + b.r >= right - 0.5 && b.vx > 0) {
         b.vx = -b.vx * rest;
-        b.omega *= 0.5;
       }
 
       if (b.y + b.r >= floor - 0.5) {
         if (b.vy > 0) {
-          // 落地撞击：给一点旋转感，之后靠衰减刹停
-          if (b.vy > 120) {
-            b.omega += (-Math.sign(b.vx || 1) * Math.min(6, b.vy / 200));
-          }
           b.vy = b.vy < 80 ? 0 : -b.vy * rest;
         }
         if (Math.abs(b.vx) > 2) b.vx *= (1 - fric * 0.5);
@@ -178,7 +173,6 @@ class PhysicsWorld {
       if (b.y - b.r <= 8.5 && b.vy < 0) b.vy = 0;
     }
 
-    // 圆-圆：法向冲量 + 轻切向摩擦；旋转仅由撞击切向速度脉冲一次
     const n = bodies.length;
     for (let i = 0; i < n; i++) {
       const a = bodies[i];
@@ -200,7 +194,6 @@ class PhysicsWorld {
         const invB = this._inv(b);
         if (invA + invB === 0) continue;
 
-        // 只用平移相对速度（不含 omega），避免旋转互相喂速度
         const rvx = b.vx - a.vx;
         const rvy = b.vy - a.vy;
         const velN = rvx * nx + rvy * ny;
@@ -218,7 +211,6 @@ class PhysicsWorld {
           b.vy += jn * ny * invB;
         }
 
-        // 切向摩擦（平移）
         const tx = -ny;
         const ty = nx;
         const velT = (b.vx - a.vx) * tx + (b.vy - a.vy) * ty;
@@ -234,41 +226,7 @@ class PhysicsWorld {
           b.vx += tx * jt * invB;
           b.vy += ty * jt * invB;
         }
-
-        // 视觉旋转：仅较强撞击给一次脉冲，不持续扭矩
-        if (impact > 80) {
-          const spin = Math.min(5, impact / 180) * Math.sign(velT || 1);
-          if (invA > 0) a.omega -= spin * 0.6;
-          if (invB > 0) b.omega += spin * 0.6;
-        }
       }
-    }
-  }
-
-  /** 刹停噪声 + 彻底消除持续旋转 */
-  _finishMotion() {
-    const bodies = this.bodies;
-    const maxOmega = 8;
-
-    for (let i = 0; i < bodies.length; i++) {
-      const b = bodies[i];
-      if (b.static || b.held || b.merging) continue;
-
-      // 硬上限
-      if (b.omega > maxOmega) b.omega = maxOmega;
-      if (b.omega < -maxOmega) b.omega = -maxOmega;
-
-      // 快速角衰减（约 0.25s 内停转）
-      b.omega *= 0.88;
-
-      const lin = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-
-      // 平移已慢：直接停转，避免视觉狂转 + 扰动堆叠
-      if (lin < 80) b.omega *= 0.5;
-      if (lin < 45 || Math.abs(b.omega) < 0.6) b.omega = 0;
-
-      if (Math.abs(b.vx) < 2) b.vx = 0;
-      if (Math.abs(b.vy) < 2) b.vy = 0;
     }
   }
 

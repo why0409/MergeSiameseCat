@@ -367,8 +367,6 @@ class Game {
       if (top >= GameConfig.deadlineY) continue;
       // 快速下落（vy 大）穿过红线：不预警
       if (b.vy > maxFall) continue;
-      // 强制刹转，避免旋转视觉/数值干扰
-      b.omega = 0;
       danger = true;
       break;
     }

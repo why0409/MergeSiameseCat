@@ -220,7 +220,7 @@ class Renderer {
         b.spawnAnim = Math.min(1, b.spawnAnim + 0.08);
       }
       const sc = b.spawnAnim != null ? 0.3 + 0.7 * this._easeOutBack(b.spawnAnim) : 1;
-      this._drawCat(ctx, b.x, b.y, b.r * sc, b.level, b.held, b.angle || 0);
+      this._drawCat(ctx, b.x, b.y, b.r * sc, b.level, b.held);
     }
   }
 
@@ -229,28 +229,25 @@ class Renderer {
     return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
   }
 
-  _drawCat(ctx, x, y, r, level, held, angle) {
+  _drawCat(ctx, x, y, r, level, held) {
     const img = assets.getCatImage(level);
     ctx.save();
-    ctx.translate(x, y);
-    if (angle) ctx.rotate(angle);
-
     ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
 
     if (img) {
-      ctx.drawImage(img, -r, -r, r * 2, r * 2);
+      ctx.drawImage(img, x - r, y - r, r * 2, r * 2);
     } else {
       const hue = 30 + level * 12;
       ctx.fillStyle = `hsl(${hue}, 45%, ${70 - level * 2}%)`;
-      ctx.fillRect(-r, -r, r * 2, r * 2);
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
       ctx.fillStyle = T.chocolate;
       ctx.font = `${Math.max(14, r * 0.45)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(level), 0, 0);
+      ctx.fillText(String(level), x, y);
     }
     ctx.restore();
 
