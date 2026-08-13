@@ -14,6 +14,9 @@ let selfName = '';
 let scrollY = 0;
 let maxScrollY = 0;
 const avatarCache = Object.create(null);
+const LOGIC_HEADER = 56;
+const LOGIC_TIPS = 44;
+const LOGIC_ROW = 78;
 
 function ensure() {
   if (ctx) return true;
@@ -105,9 +108,9 @@ function paint() {
   const w = canvas.width;
   const h = canvas.height;
   const u = h / LOGIC_H;
-  const headerH = Math.round(56 * u);
-  const tipsH = Math.round(44 * u);
-  const rowH = Math.round(78 * u);
+  const headerH = Math.round(LOGIC_HEADER * u);
+  const tipsH = Math.round(LOGIC_TIPS * u);
+  const rowH = Math.round(LOGIC_ROW * u);
   const pad = Math.round(16 * u);
   const rankW = Math.round(44 * u);
   const scoreW = Math.round(100 * u);
@@ -290,15 +293,47 @@ function fetchList() {
   });
 }
 
+function refreshMaxScroll() {
+  if (!ensure()) return { h: 1 };
+  const h = canvas.height || 1;
+  const u = h / LOGIC_H;
+  const listH = h - Math.round(LOGIC_HEADER * u) - Math.round(LOGIC_TIPS * u);
+  const contentH = list.length * Math.round(LOGIC_ROW * u);
+  maxScrollY = Math.max(0, contentH - listH);
+  return { h };
+}
+
+function clampScroll() {
+  scrollY = Math.max(0, Math.min(maxScrollY, scrollY));
+}
+
 wx.onMessage((msg) => {
   if (!msg || !msg.command) return;
   if (msg.command === 'show') {
     selfBest = scoreOf(msg.score);
     scrollY = 0;
     fetchList();
-  } else if (msg.command === 'scroll') {
+  } else if (msg.command === 'scrollBy') {
     if (!ensure()) return;
+    const { h } = refreshMaxScroll();
+    const viewH = Number(msg.viewH) || h;
+    const k = viewH > 0 ? h / viewH : 1;
+    // dy 为设计坐标本帧位移，乘画布/视口比，列表与手指 1:1
+    scrollY -= (Number(msg.dy) || 0) * k;
+    clampScroll();
+    paint();
+  } else if (msg.command === 'scrollTo') {
+    if (!ensure()) return;
+    refreshMaxScroll();
+    const t = Math.max(0, Math.min(1, Number(msg.t) || 0));
+    scrollY = t * maxScrollY;
+    paint();
+  } else if (msg.command === 'scroll') {
+    // 兼容旧消息：按逻辑高度换算
+    if (!ensure()) return;
+    refreshMaxScroll();
     scrollY = Math.max(0, (Number(msg.y) || 0) * (canvas.height / LOGIC_H));
+    clampScroll();
     paint();
   }
 });

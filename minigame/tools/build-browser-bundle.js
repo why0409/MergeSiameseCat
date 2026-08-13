@@ -12,6 +12,8 @@ const files = [
   'js/config.js',
   'js/storage.js',
   'js/assets.js',
+  'js/audio.js',
+  'js/device.js',
   'js/physics.js',
   'js/game.js',
   'js/renderer.js',

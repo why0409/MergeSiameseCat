@@ -22,15 +22,33 @@ const GameConfig = {
   menuLeft: 720,
 
   gravity: 2100,
-  restitution: 0.18,
-  friction: 0.14,
+  restitution: 0.12,
+  friction: 0.22,
   dropVy: 120,
 
   dropCooldown: 0.4,
   maxLevel: 10,
   spawnableLevels: 3,
+  /**
+   * 得分：合成「两个 Lv.N → Lv.N+1」时按被合成等级计分
+   * index 0 = 合成出 Lv2 的分，…，index 8 = 合成出 Lv10，index 9 预留给满级事件
+   */
   scoreTable: [1, 2, 4, 8, 16, 32, 64, 128, 256, 1000],
+  /**
+   * 连击加成：同一次下落内连续合成
+   * 实际得分 = base * min(1 + (combo-1)*comboBonusRate, comboMaxMult)
+   * combo=1 → 1x；combo=2 → 1.5x；combo=3 → 2x … 上限 comboMaxMult
+   */
+  comboBonusRate: 0.5,
+  comboMaxMult: 4,
   radii: [30, 50, 70, 90, 110, 130, 155, 175, 200, 230],
+
+  /** 两只猫吸向中点的时长（秒），让玩家看清 1+1 */
+  mergeAbsorbTime: 0.2,
+  /** 新猫弹出后再等这么久才允许下一次合成，看清 2、再 2+2→3 */
+  mergeLockTime: 0.26,
+  /** 新猫弹出动画时长 */
+  mergePopTime: 0.22,
 
   deadlineStableTime: 1.2,
   deadlineMinLife: 0.7,
@@ -40,7 +58,7 @@ const GameConfig = {
   guideKey: 'guideSeen_Cat_v1',
   settingsKey: 'settings_Cat_v1',
 
-  subSteps: 2,
+  subSteps: 3,
 
   theme: {
     cream: '#f8f1e6',

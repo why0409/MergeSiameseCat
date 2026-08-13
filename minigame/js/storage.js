@@ -68,10 +68,21 @@ function syncScoreToCloud(highScore, opt) {
   });
 }
 
+let _onHide = null;
+
 function bindOnHide(getHigh) {
-  if (isWx && wx.onHide) {
-    wx.onHide(() => syncScoreToCloud(getHigh(), { force: true }));
-  }
+  unbindOnHide();
+  if (!isWx || !wx.onHide) return;
+  _onHide = () => syncScoreToCloud(getHigh(), { force: true });
+  wx.onHide(_onHide);
+}
+
+function unbindOnHide() {
+  if (!_onHide) return;
+  try {
+    if (isWx && wx.offHide) wx.offHide(_onHide);
+  } catch (_) { /* ignore */ }
+  _onHide = null;
 }
 
 function isGuideSeen() {
@@ -139,6 +150,7 @@ module.exports = {
   markCloudDirty,
   syncScoreToCloud,
   bindOnHide,
+  unbindOnHide,
   isGuideSeen,
   setGuideSeen,
   getSettings,
