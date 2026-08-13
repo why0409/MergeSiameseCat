@@ -40,7 +40,7 @@ Build only via Cocos Creator 3.8.5 editor (WeChat Mini Game target). `library/`,
 ### Design canvas
 
 - **720 × 1280** portrait.
-- Lv6–10 radii compressed so two Lv8 fit side-by-side on 720 width (130/155/175/200/230). Do not inflate without checking.
+- Lv6–10 radii: 120/136/152/168/184. Two Lv8 must still fit side-by-side on 720 width. Do not inflate without checking.
 
 ---
 

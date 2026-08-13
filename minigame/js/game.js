@@ -454,7 +454,7 @@ class Game {
 
     if (nextLevel <= GameConfig.maxLevel) {
       const nb = createBody({
-        x: mx, y: my, r: radiusOf(nextLevel), level: nextLevel, vx: 0, vy: -28,
+        x: mx, y: my, r: radiusOf(nextLevel), level: nextLevel, vx: 0, vy: -36,
       });
       // 吸收阶段已淡入下一级，这里不再从小弹出，避免闪一下
       nb.spawnAnim = 1;

@@ -21,10 +21,10 @@ const GameConfig = {
   /** 微信胶囊左缘（设计坐标），BEST 等勿越过 */
   menuLeft: 720,
 
-  gravity: 2100,
-  restitution: 0.12,
-  friction: 0.22,
-  dropVy: 120,
+  gravity: 2200,
+  restitution: 0.22,
+  friction: 0.2,
+  dropVy: 180,
 
   dropCooldown: 0.4,
   maxLevel: 10,
@@ -41,7 +41,11 @@ const GameConfig = {
    */
   comboBonusRate: 0.5,
   comboMaxMult: 4,
-  radii: [30, 50, 70, 90, 110, 130, 155, 175, 200, 230],
+  /**
+   * Lv6–10 再收一档，减轻满屏挤压。
+   * 两只 Lv8：152×4=608，加墙仍低于 720；Lv10 直径约半屏。
+   */
+  radii: [30, 50, 70, 90, 106, 120, 136, 152, 168, 184],
 
   /** 两只猫吸向中点的时长（秒），让玩家看清 1+1 */
   mergeAbsorbTime: 0.2,
@@ -58,7 +62,12 @@ const GameConfig = {
   guideKey: 'guideSeen_Cat_v1',
   settingsKey: 'settings_Cat_v1',
 
-  subSteps: 3,
+  /**
+   * 每帧物理子步数。一帧 dt 会拆成 dt/subSteps 连跑这么多次。
+   * 2：够用，下落和堆叠手感正常。不要再改成 3——
+   * 子步越多，同一帧里分离/阻尼/合成会多做一轮，容易把堆往上顶、下落变肉。
+   */
+  subSteps: 2,
 
   theme: {
     cream: '#f8f1e6',

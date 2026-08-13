@@ -445,18 +445,14 @@ class Renderer {
     }
     ctx.restore();
 
+    // 描边画在圆内，避免两只贴紧时描边叠在一起像「边缘重合」
+    const lw = held ? 3 : (glow > 0.05 ? 3 : 2);
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    if (held) {
-      ctx.strokeStyle = T.blueEye;
-      ctx.lineWidth = 3;
-    } else if (glow > 0.05) {
-      ctx.strokeStyle = T.gold;
-      ctx.lineWidth = 3;
-    } else {
-      ctx.strokeStyle = 'rgba(69,46,39,0.35)';
-      ctx.lineWidth = 2;
-    }
+    ctx.arc(x, y, Math.max(1, r - lw * 0.5), 0, Math.PI * 2);
+    if (held) ctx.strokeStyle = T.blueEye;
+    else if (glow > 0.05) ctx.strokeStyle = T.gold;
+    else ctx.strokeStyle = 'rgba(69,46,39,0.35)';
+    ctx.lineWidth = lw;
     ctx.stroke();
   }
 
