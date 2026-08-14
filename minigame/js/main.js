@@ -64,6 +64,7 @@ function createInput(canvas, renderer, game) {
         if (hit === 'btn_settings_close') game.closeSettings();
         else if (hit === 'tog_vibrate') game.toggleSetting('vibrate');
         else if (hit === 'tog_sound') game.toggleSetting('sound');
+        else if (hit === 'tog_gold') game.toggleSetting('goldName');
         return;
       }
 

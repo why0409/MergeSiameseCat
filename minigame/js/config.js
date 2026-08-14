@@ -63,6 +63,7 @@ const GameConfig = {
 
   storageKey: 'highestScore_Cat',
   cloudScoreKey: 'score',
+  svipCloudKey: 'svip',
   guideKey: 'guideSeen_Cat_v1',
   settingsKey: 'settings_Cat_v1',
 

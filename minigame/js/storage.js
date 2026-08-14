@@ -102,8 +102,12 @@ function syncScoreToCloud(highScore, opt) {
     return;
   }
 
+  const svip = !!(opts.svip != null ? opts.svip : getSettings().goldName);
   wx.setUserCloudStorage({
-    KVDataList: [{ key: GameConfig.cloudScoreKey, value: String(score) }],
+    KVDataList: [
+      { key: GameConfig.cloudScoreKey, value: String(score) },
+      { key: GameConfig.svipCloudKey || 'svip', value: svip ? '1' : '0' },
+    ],
     success: () => {
       dirty = false;
       if (done) done(true);
@@ -155,6 +159,7 @@ function setGuideSeen() {
 const DEFAULT_SETTINGS = {
   vibrate: true,
   sound: true,
+  goldName: false,
 };
 
 function _readRaw(key) {
@@ -180,6 +185,7 @@ function getSettings() {
     return {
       vibrate: obj.vibrate !== false,
       sound: obj.sound !== false,
+      goldName: !!obj.goldName,
     };
   } catch (_) {
     return { ...DEFAULT_SETTINGS };

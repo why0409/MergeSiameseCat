@@ -619,23 +619,24 @@ class Renderer {
     ctx.fillStyle = T.overlay;
     ctx.fillRect(0, 0, GameConfig.designWidth, GameConfig.designHeight);
 
-    const { cx, cy, cw, ch } = this._panelBox(560, 520);
+    const { cx, cy, cw, ch } = this._panelBox(560, 640);
     this._drawCard(ctx, cx, cy, cw, ch);
 
     ctx.fillStyle = T.chocolate;
     ctx.font = 'bold 40px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('设置', GameConfig.designWidth / 2, cy + 70);
+    ctx.fillText('设置', GameConfig.designWidth / 2, cy + 62);
 
-    this._drawToggleRow(ctx, 'tog_sound', cx + 50, cy + 150, cw - 100, '音效', !!game.settings.sound);
-    this._drawToggleRow(ctx, 'tog_vibrate', cx + 50, cy + 250, cw - 100, '震动', !!game.settings.vibrate);
+    this._drawToggleRow(ctx, 'tog_sound', cx + 50, cy + 122, cw - 100, '音效', !!game.settings.sound);
+    this._drawToggleRow(ctx, 'tog_vibrate', cx + 50, cy + 210, cw - 100, '震动', !!game.settings.vibrate);
+    this._drawToggleRow(ctx, 'tog_gold', cx + 50, cy + 298, cw - 100, '金色昵称', !!game.settings.goldName);
 
     ctx.fillStyle = 'rgba(69,46,39,0.45)';
     ctx.font = '20px sans-serif';
-    ctx.fillText('设置会自动保存到本机', GameConfig.designWidth / 2, cy + 360);
+    ctx.fillText('开启后排行榜显示金色名字与 SVIP', GameConfig.designWidth / 2, cy + 410);
 
-    this._drawButton(ctx, 'btn_settings_close', cx + 100, cy + 400, 360, 64, '返回', true);
+    this._drawButton(ctx, 'btn_settings_close', cx + 100, cy + 460, 360, 64, '返回', true);
   }
 
   _drawToggleRow(ctx, hitName, x, y, w, label, on) {
@@ -1184,6 +1185,22 @@ class Renderer {
     this._drawButton(ctx, 'btn_close_rank', cx + (cw - 300) / 2, cy + ch - 80, 300, 64, '关闭', false);
   }
 
+  /** 金色 SVIP 角标，返回占用宽度 */
+  _drawSvipBadge(ctx, x, mid, u) {
+    const bw = 52 * u;
+    const bh = 22 * u;
+    ctx.fillStyle = T.gold;
+    this._roundRect(ctx, x, mid - bh / 2, bw, bh, 6 * u);
+    ctx.fill();
+    ctx.fillStyle = T.chocolate;
+    ctx.font = `bold ${Math.round(14 * u)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SVIP', x + bw / 2, mid);
+    ctx.textAlign = 'left';
+    return bw + 8 * u;
+  }
+
   /** 浏览器预览：与子域同布局的本地榜，用来验滚动跟手 */
   _drawLocalRank(ctx, game, items, x, y, w, h) {
     const u = h / RANK_LOGIC_H;
@@ -1236,15 +1253,18 @@ class Renderer {
       ctx.font = `bold ${Math.round(18 * u)}px sans-serif`;
       ctx.fillText((item.name || '?').slice(0, 1), avX, mid);
 
-      ctx.fillStyle = T.chocolate;
+      const vip = !!(item.svip || (item.isSelf && game.settings && game.settings.goldName));
+      const nameX = avX + avR + 12 * u;
       ctx.font = `bold ${Math.round(24 * u)}px sans-serif`;
       ctx.textAlign = 'left';
-      ctx.fillText(item.name, avX + avR + 12 * u, mid);
+      ctx.fillStyle = vip ? T.gold : T.chocolate;
+      ctx.fillText(item.name, nameX, mid);
+      let extraX = nameX + ctx.measureText(item.name).width + 8 * u;
+      if (vip) extraX += this._drawSvipBadge(ctx, extraX, mid, u);
       if (item.isSelf) {
-        const nw = ctx.measureText(item.name).width;
         ctx.fillStyle = T.gold;
         ctx.font = `bold ${Math.round(18 * u)}px sans-serif`;
-        ctx.fillText('我', avX + avR + 12 * u + nw + 8 * u, mid);
+        ctx.fillText('我', extraX, mid);
       }
 
       ctx.fillStyle = T.gold;

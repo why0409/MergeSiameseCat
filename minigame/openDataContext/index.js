@@ -11,6 +11,8 @@ let list = [];
 let selfBest = 0;
 let selfAvatar = '';
 let selfName = '';
+/** 主域开关：自己是否显示金色昵称 / SVIP */
+let selfSvip = false;
 let scrollY = 0;
 let maxScrollY = 0;
 const avatarCache = Object.create(null);
@@ -70,6 +72,32 @@ function drawAvatar(cx, cy, r, url) {
   ctx.stroke();
 }
 
+function isSvip(item) {
+  return !!(item && (item.svip || (item.isSelf && selfSvip)));
+}
+
+function drawSvipBadge(x, mid, u) {
+  const bw = Math.round(52 * u);
+  const bh = Math.round(22 * u);
+  ctx.fillStyle = '#d4a84b';
+  const r = Math.round(6 * u);
+  ctx.beginPath();
+  ctx.moveTo(x + r, mid - bh / 2);
+  ctx.arcTo(x + bw, mid - bh / 2, x + bw, mid + bh / 2, r);
+  ctx.arcTo(x + bw, mid + bh / 2, x, mid + bh / 2, r);
+  ctx.arcTo(x, mid + bh / 2, x, mid - bh / 2, r);
+  ctx.arcTo(x, mid - bh / 2, x + bw, mid - bh / 2, r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#452e27';
+  ctx.font = `bold ${Math.round(14 * u)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SVIP', x + bw / 2, mid);
+  ctx.textAlign = 'left';
+  return bw + Math.round(8 * u);
+}
+
 function ellipsis(text, maxW) {
   const full = String(text || '好友');
   if (ctx.measureText(full).width <= maxW) return full;
@@ -89,12 +117,14 @@ function applySelfScore() {
   if (me) {
     me.score = Math.max(me.score, selfBest);
     me.isSelf = true;
+    me.svip = !!(me.svip || selfSvip);
   } else {
     list.push({
       name: selfName || '我',
       avatar: selfAvatar || '',
       score: selfBest,
       isSelf: true,
+      svip: !!selfSvip,
     });
     if (selfAvatar) loadAvatar(selfAvatar);
   }
@@ -165,18 +195,20 @@ function paint() {
       drawAvatar(avX, mid, avatarR, item.avatar);
 
       const nameX = avX + avatarR + Math.round(12 * u);
-      const nameMax = w - nameX - scoreW - pad - (self ? Math.round(40 * u) : 0);
-      ctx.fillStyle = '#452e27';
+      const vip = isSvip(item);
+      const nameMax = w - nameX - scoreW - pad - (self ? Math.round(40 * u) : 0) - (vip ? Math.round(64 * u) : 0);
+      ctx.fillStyle = vip ? '#d4a84b' : '#452e27';
       ctx.font = `bold ${nameSize}px sans-serif`;
       ctx.textAlign = 'left';
       const name = ellipsis(item.name, nameMax);
       ctx.fillText(name, nameX, mid);
 
+      let extraX = nameX + ctx.measureText(name).width + Math.round(8 * u);
+      if (vip) extraX += drawSvipBadge(extraX, mid, u);
       if (self) {
-        const nw = ctx.measureText(name).width;
         ctx.fillStyle = '#d4a84b';
         ctx.font = `bold ${tipsSize}px sans-serif`;
-        ctx.fillText('我', nameX + nw + Math.round(8 * u), mid);
+        ctx.fillText('我', extraX, mid);
       }
 
       ctx.fillStyle = '#d4a84b';
@@ -266,16 +298,21 @@ function fetchList() {
 
   resolveSelfProfile(() => {
     wx.getFriendCloudStorage({
-      keyList: ['score'],
+      keyList: ['score', 'svip'],
       success: (res) => {
         list = (res.data || []).map((u) => {
           let score = 0;
-          const kv = (u.KVDataList || []).find((x) => x.key === 'score');
-          if (kv) score = scoreOf(kv.value);
+          let svip = false;
+          const kvs = u.KVDataList || [];
+          for (let i = 0; i < kvs.length; i++) {
+            if (kvs[i].key === 'score') score = scoreOf(kvs[i].value);
+            if (kvs[i].key === 'svip') svip = String(kvs[i].value) === '1';
+          }
           return {
             name: u.nickname || '好友',
             avatar: u.avatarUrl || '',
             score,
+            svip,
             isSelf: false,
           };
         });
@@ -311,6 +348,7 @@ wx.onMessage((msg) => {
   if (!msg || !msg.command) return;
   if (msg.command === 'show') {
     selfBest = scoreOf(msg.score);
+    selfSvip = !!msg.svip;
     scrollY = 0;
     fetchList();
   } else if (msg.command === 'scrollBy') {

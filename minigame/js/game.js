@@ -647,7 +647,7 @@ class Game {
   }
 
   toggleSetting(key) {
-    if (key !== 'vibrate' && key !== 'sound') return;
+    if (key !== 'vibrate' && key !== 'sound' && key !== 'goldName') return;
     const next = !this.settings[key];
     this.settings = storage.setSettings({ [key]: next });
     audio.setEnabled(this.settings.sound);
@@ -656,6 +656,10 @@ class Game {
       this._sfx('ui');
     }
     if (key === 'vibrate' && next) this._vibrate('light');
+    if (key === 'goldName') {
+      this._sfx('ui');
+      storage.syncScoreToCloud(this.highScore, { force: true, svip: next });
+    }
   }
 
   // ── 排行榜 ──
@@ -678,7 +682,11 @@ class Game {
         this._rankShowTimer = setTimeout(() => {
           this._rankShowTimer = null;
           if (this.state !== State.RANK) return;
-          this._postOpenData({ command: 'show', score });
+          this._postOpenData({
+            command: 'show',
+            score,
+            svip: !!this.settings.goldName,
+          });
         }, 200);
       },
     });
@@ -782,6 +790,7 @@ class Game {
     if (me) {
       me.score = Math.max(me.score, this.highScore);
       me.isSelf = true;
+      me.svip = !!this.settings.goldName;
     }
     items.sort((a, b) => b.score - a.score);
     return items;
