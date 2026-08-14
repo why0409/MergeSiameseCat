@@ -21,10 +21,14 @@ const GameConfig = {
   /** 微信胶囊左缘（设计坐标），BEST 等勿越过 */
   menuLeft: 720,
 
-  gravity: 2200,
-  restitution: 0.22,
-  friction: 0.1,
-  dropVy: 180,
+  /**
+   * 对齐旧 Cocos Box2D 手感（GameConfig.gravity = 960，预制体 restitution 0、friction 0.2）。
+   * 下落以重力为主，初速只轻轻一送；弹力留给砸地/砸稳堆，猫与猫不互弹。
+   */
+  gravity: 1080,
+  restitution: 0.12,
+  friction: 0.2,
+  dropVy: 80,
 
   dropCooldown: 0.4,
   maxLevel: 10,
