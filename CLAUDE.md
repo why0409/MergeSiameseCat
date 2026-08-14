@@ -50,7 +50,7 @@ Build only via Cocos Creator 3.8.5 editor (WeChat Mini Game target). `library/`,
 |------|------|
 | `game.js` | WeChat entry → `js/main.js` |
 | `js/config.js` | Gravity, radii, score table, theme colors, storage keys |
-| `js/physics.js` | Circle physics (walls + circle-circle); **held cats skip collision** |
+| `js/physics.js` | Planck/Box2D 封装（对齐旧 Cocos：重力 960、猫 friction 0.2 / restitution 0）；**held 不碰撞** |
 | `js/game.js` | State machine: loading → ready → playing → gameover / rank |
 | `js/renderer.js` | Canvas draw + UI hit areas (start / gameover / rank) |
 | `js/assets.js` | Load `images/cats/cat_1..10.jpeg` |

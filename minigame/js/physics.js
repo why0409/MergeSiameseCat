@@ -1,21 +1,28 @@
 /**
- * 轻量圆盘 2D 物理（仅平移，无旋转）
- * 空中保持正常下落；仅在贴地/有支撑时刹停与休眠，避免上顶堆高
+ * Box2D（Planck.js）封装，对齐旧 Cocos PhysicsSystem2D 手感
+ * Cocos：gravity (0,-960) y-up，像素/米=32 → 30 m/s²
+ * 猫：density 1、friction 0.2、restitution 0；墙/地 friction 0.5、restitution 0.1
+ * 圆盘锁旋转（画面不转），碰撞求解仍是 Box2D
  */
 const GameConfig = require('./config');
+const planck = require('./vendor/planck');
+
+const PTM = 32;
+const CAT_BIT = 0x0002;
+const WALL_BIT = 0x0001;
 
 let _id = 1;
 
-const SLEEP_VEL = 18;
-const SLEEP_TIME = 0.22;
-const WAKE_IMPULSE = 90;
-/** 碰撞比绘制略胖，贴紧时圆边不咬合 */
-const CONTACT_SKIN = 1.6;
-/** 低于此相对法向速度视为静接触：只消闭合速度，不给弹力 */
-const REST_IMPACT = 85;
+function toM(px) {
+  return px / PTM;
+}
+
+function toP(m) {
+  return m * PTM;
+}
 
 function createBody(opts) {
-  const b = {
+  return {
     id: _id++,
     x: opts.x,
     y: opts.y,
@@ -23,8 +30,7 @@ function createBody(opts) {
     vy: opts.vy || 0,
     r: opts.r,
     level: opts.level,
-    // 质量随半径缓增，避免大猫把小猫弹飞（r² 质量比可达 50:1）
-    mass: Math.max(0.9, 0.7 + opts.r / 90),
+    mass: Math.max(0.6, (opts.r * opts.r) / 1024),
     invMass: 0,
     static: !!opts.static,
     held: !!opts.held,
@@ -33,21 +39,59 @@ function createBody(opts) {
     sleeping: false,
     sleepTimer: 0,
     fallGrace: 0,
+    mergeLock: 0,
+    _b2: null,
+    _fix: null,
   };
-  recomputeInvMass(b);
-  return b;
 }
 
 function recomputeInvMass(b) {
-  b.invMass = (b.static || b.held || b.merging) ? 0 : 1 / b.mass;
+  if (!b || !b._b2) {
+    b.invMass = (b.static || b.held || b.merging) ? 0 : 1 / Math.max(b.mass, 0.01);
+    return;
+  }
+  syncType(b);
+  if (!b.held && !b.merging && !b.static) {
+    b._b2.setLinearVelocity(planck.Vec2(toM(b.vx), toM(b.vy)));
+    b._b2.setAwake(true);
+  }
 }
 
 function wakeBody(b) {
   if (!b || b.static || b.held || b.merging) return;
   b.sleeping = false;
-  b.sleepTimer = 0;
-  // 合成留洞后给一段自由落体，避免刚唤醒就被当成「站稳」冻在半空
-  b.fallGrace = Math.max(b.fallGrace || 0, 0.4);
+  if (b._b2) b._b2.setAwake(true);
+}
+
+function syncType(b) {
+  const body = b._b2;
+  if (!body) return;
+  const locked = b.static || b.held || b.merging;
+  body.setType(locked ? 'kinematic' : 'dynamic');
+  const mask = locked ? 0 : (CAT_BIT | WALL_BIT);
+  for (let f = body.getFixtureList(); f; f = f.getNext()) {
+    f.setFilterCategoryBits(CAT_BIT);
+    f.setFilterMaskBits(mask);
+    f.refilter();
+  }
+  if (!locked) body.setAwake(true);
+}
+
+function pushToBox(b) {
+  if (!b._b2) return;
+  b._b2.setTransform(planck.Vec2(toM(b.x), toM(b.y)), b._b2.getAngle());
+  b._b2.setLinearVelocity(planck.Vec2(toM(b.vx), toM(b.vy)));
+}
+
+function pullFromBox(b) {
+  if (!b._b2) return;
+  const p = b._b2.getPosition();
+  b.x = toP(p.x);
+  b.y = toP(p.y);
+  const v = b._b2.getLinearVelocity();
+  b.vx = toP(v.x);
+  b.vy = toP(v.y);
+  b.sleeping = !b._b2.isAwake();
 }
 
 class PhysicsWorld {
@@ -57,9 +101,50 @@ class PhysicsWorld {
     this.right = GameConfig.designWidth - GameConfig.wallPadding;
     this.floor = GameConfig.floorY;
     this.gravity = GameConfig.gravity;
+    this._world = null;
+    this._walls = null;
+    this._initWorld();
+  }
+
+  _initWorld() {
+    const g = toM(GameConfig.gravity || 960);
+    this._world = planck.World(planck.Vec2(0, g));
+    this._buildWalls();
+  }
+
+  _buildWalls() {
+    if (this._walls && this._world) {
+      this._world.destroyBody(this._walls);
+      this._walls = null;
+    }
+    const left = toM(this.left);
+    const right = toM(this.right);
+    const floor = toM(this.floor);
+    const top = toM(-200);
+    const bot = toM(this.floor + 400);
+
+    this._walls = this._world.createBody({ type: 'static' });
+    const wallFix = {
+      density: 1,
+      friction: 0.5,
+      restitution: 0.1,
+      filterCategoryBits: WALL_BIT,
+      filterMaskBits: CAT_BIT,
+    };
+    this._walls.createFixture(planck.Edge(planck.Vec2(left, top), planck.Vec2(left, bot)), wallFix);
+    this._walls.createFixture(planck.Edge(planck.Vec2(right, top), planck.Vec2(right, bot)), wallFix);
+    this._walls.createFixture(planck.Edge(planck.Vec2(left - 1, floor), planck.Vec2(right + 1, floor)), wallFix);
   }
 
   clear() {
+    for (let i = 0; i < this.bodies.length; i++) {
+      const b = this.bodies[i];
+      if (b._b2) {
+        this._world.destroyBody(b._b2);
+        b._b2 = null;
+        b._fix = null;
+      }
+    }
     this.bodies = [];
   }
 
@@ -68,11 +153,37 @@ class PhysicsWorld {
     this.right = GameConfig.designWidth - GameConfig.wallPadding;
     this.floor = GameConfig.floorY;
     this.gravity = GameConfig.gravity;
+    if (this._world) {
+      this._world.setGravity(planck.Vec2(0, toM(this.gravity)));
+      this._buildWalls();
+    }
   }
 
   add(body) {
-    recomputeInvMass(body);
-    wakeBody(body);
+    const type = (body.static || body.held || body.merging) ? 'kinematic' : 'dynamic';
+    const b2 = this._world.createBody({
+      type,
+      position: planck.Vec2(toM(body.x), toM(body.y)),
+      linearVelocity: planck.Vec2(toM(body.vx || 0), toM(body.vy || 0)),
+      allowSleep: true,
+      awake: true,
+      fixedRotation: true,
+      bullet: false,
+      linearDamping: 0,
+      angularDamping: 0,
+      gravityScale: 1,
+    });
+    const locked = type !== 'dynamic';
+    const fix = b2.createFixture(planck.Circle(toM(body.r)), {
+      density: 1,
+      friction: 0.2,
+      restitution: 0,
+      filterCategoryBits: CAT_BIT,
+      filterMaskBits: locked ? 0 : (CAT_BIT | WALL_BIT),
+    });
+    body._b2 = b2;
+    body._fix = fix;
+    b2.setUserData(body);
     this.bodies.push(body);
     return body;
   }
@@ -80,13 +191,18 @@ class PhysicsWorld {
   remove(body) {
     const i = this.bodies.indexOf(body);
     if (i >= 0) this.bodies.splice(i, 1);
+    if (body._b2) {
+      this._world.destroyBody(body._b2);
+      body._b2 = null;
+      body._fix = null;
+    }
   }
 
   wakeAround(x, y, radius) {
     const r2 = radius * radius;
     for (let i = 0; i < this.bodies.length; i++) {
       const b = this.bodies[i];
-      if (!b.sleeping) continue;
+      if (b.held || b.merging || b.static) continue;
       const dx = b.x - x;
       const dy = b.y - y;
       if (dx * dx + dy * dy <= r2) wakeBody(b);
@@ -94,357 +210,27 @@ class PhysicsWorld {
   }
 
   wakeAll() {
-    const bodies = this.bodies;
-    for (let i = 0; i < bodies.length; i++) wakeBody(bodies[i]);
+    for (let i = 0; i < this.bodies.length; i++) wakeBody(this.bodies[i]);
   }
 
   step(dt) {
-    const g = this.gravity;
     const bodies = this.bodies;
+    for (let i = 0; i < bodies.length; i++) {
+      const b = bodies[i];
+      if (!b._b2) continue;
+      if (b.held || b.merging) {
+        b._b2.setTransform(planck.Vec2(toM(b.x), toM(b.y)), 0);
+        b._b2.setLinearVelocity(planck.Vec2(0, 0));
+      }
+    }
+
+    this._world.step(dt, 8, 3);
 
     for (let i = 0; i < bodies.length; i++) {
       const b = bodies[i];
-      if (b.static || b.held || b.merging || b.sleeping) continue;
-      b.vy += g * dt;
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
+      if (!b._b2 || b.held || b.merging) continue;
+      pullFromBox(b);
     }
-
-    const n = bodies.length;
-    const iters = n > 16 ? 10 : 8;
-    for (let k = 0; k < iters; k++) {
-      this._separateWalls();
-      this._separateCircles(0.85, 0.04);
-    }
-    this._separateWalls();
-    this._separateCircles(1, 0);
-
-    this._resolveVelocities();
-    this._postStabilize(dt);
-  }
-
-  /** 速度冲量：休眠当固定支撑，避免整堆被弹起来 */
-  _velInv(b) {
-    if (b.static || b.held || b.merging || b.sleeping) return 0;
-    return b.invMass;
-  }
-
-  /** 位置分离：休眠可被轻轻挤开，密堆才能把穿透解开 */
-  _posInv(b) {
-    if (b.static || b.held || b.merging) return 0;
-    if (b.sleeping) return b.invMass * 0.22;
-    return b.invMass;
-  }
-
-  _separateWalls() {
-    const left = this.left;
-    const right = this.right;
-    const floor = this.floor;
-
-    for (let i = 0; i < this.bodies.length; i++) {
-      const b = this.bodies[i];
-      if (b.merging) continue;
-      if (b.held) {
-        if (b.x - b.r < left) b.x = left + b.r;
-        else if (b.x + b.r > right) b.x = right - b.r;
-        continue;
-      }
-      if (b.static) continue;
-
-      if (b.x - b.r < left) b.x = left + b.r;
-      else if (b.x + b.r > right) b.x = right - b.r;
-      if (b.y + b.r > floor) {
-        b.y = floor - b.r;
-        if (b.sleeping) {
-          b.vx = 0;
-          b.vy = 0;
-        }
-      }
-      if (b.y - b.r < 8) b.y = 8 + b.r;
-    }
-  }
-
-  _separateCircles(percent, slop) {
-    const bodies = this.bodies;
-    const n = bodies.length;
-    const minGap = CONTACT_SKIN;
-
-    for (let i = 0; i < n; i++) {
-      const a = bodies[i];
-      if (a.merging || a.held) continue;
-      for (let j = i + 1; j < n; j++) {
-        const b = bodies[j];
-        if (b.merging || b.held) continue;
-
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        // 同级可合成：不要用皮肤间距推开，否则锁定结束就碰不上
-        const mergeable = a.level === b.level
-          && a.level < GameConfig.maxLevel
-          && !a.merging && !b.merging;
-        const minDist = a.r + b.r + (mergeable ? 0.15 : minGap);
-        const distSq = dx * dx + dy * dy;
-        if (distSq >= minDist * minDist || distSq < 1e-12) continue;
-
-        let dist = Math.sqrt(distSq);
-        let nx;
-        let ny;
-        if (dist < 1e-6) {
-          nx = 0;
-          ny = 1;
-          dist = 1e-6;
-        } else {
-          nx = dx / dist;
-          ny = dy / dist;
-        }
-
-        let invA = this._posInv(a);
-        let invB = this._posInv(b);
-        if (invA + invB === 0) {
-          const half = Math.max(0, minDist - dist) * 0.5;
-          if (half > 0 && !a.static && !b.static) {
-            a.x -= nx * half;
-            a.y -= ny * half;
-            b.x += nx * half;
-            b.y += ny * half;
-          }
-          continue;
-        }
-
-        const pen = minDist - dist - slop;
-        if (pen <= 0) continue;
-        let corr = (pen / (invA + invB)) * percent;
-        // 单次位移封顶，避免大重叠时一帧弹飞
-        const maxMove = 22;
-        const moveA = corr * invA;
-        const moveB = corr * invB;
-        if (moveA > maxMove || moveB > maxMove) {
-          const s = maxMove / Math.max(moveA, moveB);
-          corr *= s;
-        }
-        if (invA > 0) {
-          a.x -= nx * corr * invA;
-          a.y -= ny * corr * invA;
-        }
-        if (invB > 0) {
-          b.x += nx * corr * invB;
-          b.y += ny * corr * invB;
-        }
-      }
-    }
-  }
-
-  _resolveVelocities() {
-    const bodies = this.bodies;
-    const rest = GameConfig.restitution;
-    const fric = GameConfig.friction;
-    const floor = this.floor;
-    const left = this.left;
-    const right = this.right;
-
-    for (let i = 0; i < bodies.length; i++) {
-      const b = bodies[i];
-      if (b.static || b.held || b.merging || b.sleeping) continue;
-
-      if (b.x - b.r <= left + 0.5 && b.vx < 0) {
-        b.vx = Math.abs(b.vx) < 45 ? 0 : -b.vx * rest * 0.55;
-      } else if (b.x + b.r >= right - 0.5 && b.vx > 0) {
-        b.vx = Math.abs(b.vx) < 45 ? 0 : -b.vx * rest * 0.55;
-      }
-
-      if (b.y + b.r >= floor - 0.5) {
-        if (b.vy > 0) {
-          b.vy = b.vy < 75 ? 0 : -b.vy * rest;
-        }
-        // 地板只轻擦，快停住才刹，否则像粘在地上爬
-        if (Math.abs(b.vx) < 14) b.vx *= 0.82;
-        else b.vx *= 0.992;
-      }
-
-      if (b.y - b.r <= 8.5 && b.vy < 0) b.vy = 0;
-    }
-
-    const n = bodies.length;
-    for (let i = 0; i < n; i++) {
-      const a = bodies[i];
-      if (a.merging || a.held) continue;
-      for (let j = i + 1; j < n; j++) {
-        const b = bodies[j];
-        if (b.merging || b.held) continue;
-
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        // 只在真正压进碰撞壳时才做冲量；贴着皮肤间距的静接触不要每帧弹
-        const touch = a.r + b.r + 0.5;
-        const distSq = dx * dx + dy * dy;
-        if (distSq > touch * touch || distSq < 1e-12) continue;
-
-        const dist = Math.sqrt(distSq);
-        const nx = dist > 1e-6 ? dx / dist : 0;
-        const ny = dist > 1e-6 ? dy / dist : 1;
-        const invA = this._velInv(a);
-        const invB = this._velInv(b);
-        if (invA + invB === 0) continue;
-
-        const rvx = b.vx - a.vx;
-        const rvy = b.vy - a.vy;
-        const velN = rvx * nx + rvy * ny;
-        if (velN > 0.3) continue;
-
-        const impact = Math.abs(velN);
-        const spdA = Math.hypot(a.vx, a.vy);
-        const spdB = Math.hypot(b.vx, b.vy);
-        // 堆里慢速互挤：只消闭合，不加摩擦，否则整堆一起抖、滑不动
-        if (spdA < 42 && spdB < 42) {
-          if (velN < -1) {
-            const jn = -velN / (invA + invB);
-            if (invA > 0) {
-              a.vx -= jn * nx * invA;
-              a.vy -= jn * ny * invA;
-            }
-            if (invB > 0) {
-              b.vx += jn * nx * invB;
-              b.vy += jn * ny * invB;
-            }
-          }
-          continue;
-        }
-
-        const aLand = a.vy > 140 && (b.sleeping || Math.abs(b.vy) < 30) && b.y > a.y + 10;
-        const bLand = b.vy > 140 && (a.sleeping || Math.abs(a.vy) < 30) && a.y > b.y + 10;
-        const canBounce = (aLand || bLand) && impact >= REST_IMPACT;
-        const e = canBounce ? rest : 0;
-        const jn = -(1 + e) * velN / (invA + invB);
-
-        if (canBounce && Math.abs(jn) > WAKE_IMPULSE) {
-          wakeBody(a);
-          wakeBody(b);
-        }
-
-        if (invA > 0) {
-          a.vx -= jn * nx * invA;
-          a.vy -= jn * ny * invA;
-        }
-        if (invB > 0) {
-          b.vx += jn * nx * invB;
-          b.vy += jn * ny * invB;
-        }
-
-        const tx = -ny;
-        const ty = nx;
-        const velT = (b.vx - a.vx) * tx + (b.vy - a.vy) * ty;
-        let jt = -velT / (invA + invB) * (fric * 0.28);
-        const maxF = Math.abs(jn) * fric;
-        if (jt > maxF) jt = maxF;
-        if (jt < -maxF) jt = -maxF;
-        if (invA > 0) {
-          a.vx -= tx * jt * invA;
-          a.vy -= ty * jt * invA;
-        }
-        if (invB > 0) {
-          b.vx += tx * jt * invB;
-          b.vy += ty * jt * invB;
-        }
-      }
-    }
-  }
-
-  _postStabilize(dt) {
-    const bodies = this.bodies;
-    const floor = this.floor;
-
-    for (let i = 0; i < bodies.length; i++) {
-      const b = bodies[i];
-      if (b.static || b.held || b.merging) continue;
-
-      if (b.y + b.r >= floor - 0.25) {
-        b.y = floor - b.r;
-        if (b.vy > 0 && b.vy < 70) b.vy = 0;
-      }
-
-      if (b.sleeping) {
-        b.vx = 0;
-        b.vy = 0;
-        continue;
-      }
-
-      if ((b.fallGrace || 0) > 0) {
-        b.fallGrace -= dt;
-        // 自由落体：不刹下速、不休眠
-        continue;
-      }
-
-      const supported = this._isWellSupported(b);
-      if (supported) {
-        // 横向：只有快停住才刹，滑动中几乎不减速
-        if (Math.abs(b.vx) < 16) b.vx *= 0.84;
-      }
-      // 压在别的猫/地上时，消掉往里钻的下速（不碰横向，避免粘住）
-      if (this._isOnSomething(b) && b.vy > 0 && b.vy < 160) {
-        b.vy = b.vy < 50 ? 0 : 18;
-      }
-
-      const spd = Math.hypot(b.vx, b.vy);
-      if (spd > 820) {
-        const k = 820 / spd;
-        b.vx *= k;
-        b.vy *= k;
-      }
-
-      if (Math.abs(b.vx) < 2.5) b.vx = 0;
-      if (supported && b.vy > 0 && b.vy < 8) b.vy = 0;
-
-      const still = Math.abs(b.vx) < SLEEP_VEL && Math.abs(b.vy) < SLEEP_VEL;
-      if (still && this._isWellSupported(b)) {
-        b.sleepTimer += dt;
-        if (b.sleepTimer >= SLEEP_TIME) {
-          b.sleeping = true;
-          b.vx = 0;
-          b.vy = 0;
-          b.sleepTimer = 0;
-        }
-      } else {
-        b.sleepTimer = 0;
-      }
-    }
-  }
-
-  /** 是否压着另一只猫或地面（侧上方也算），用来消掉往里钻的下速 */
-  _isOnSomething(b) {
-    if (b.y + b.r >= this.floor - 1.2) return true;
-    const bodies = this.bodies;
-    for (let i = 0; i < bodies.length; i++) {
-      const o = bodies[i];
-      if (o === b || o.merging || o.held) continue;
-      const dx = o.x - b.x;
-      const dy = o.y - b.y;
-      const minDist = o.r + b.r + CONTACT_SKIN + 2;
-      const distSq = dx * dx + dy * dy;
-      if (distSq > minDist * minDist || distSq < 1e-12) continue;
-      if (dy / Math.sqrt(distSq) > 0.22) return true;
-    }
-    return false;
-  }
-
-  /** 是否压在较稳的支撑上（地面，或正下方的猫）。侧碰/轻擦不算。 */
-  _isWellSupported(b) {
-    const floor = this.floor;
-    if (b.y + b.r >= floor - 1.2) return true;
-
-    const bodies = this.bodies;
-    for (let i = 0; i < bodies.length; i++) {
-      const o = bodies[i];
-      if (o === b || o.merging || o.held) continue;
-      const dx = o.x - b.x;
-      const dy = o.y - b.y;
-      const minDist = o.r + b.r + CONTACT_SKIN + 2;
-      const distSq = dx * dx + dy * dy;
-      if (distSq > minDist * minDist || distSq < 1e-12) continue;
-      const ny = dy / Math.sqrt(distSq);
-      // 对方要明显在下方，贴墙叠成一列时可以继续往下滑
-      if (ny > 0.55) return true;
-    }
-    return false;
   }
 
   collectMergePairs(maxLevel) {
@@ -452,6 +238,7 @@ class PhysicsWorld {
     const used = new Set();
     const bodies = this.bodies;
     const n = bodies.length;
+    const slop = 8;
 
     for (let i = 0; i < n; i++) {
       const a = bodies[i];
@@ -461,10 +248,9 @@ class PhysicsWorld {
         if (!this._canStartMerge(b, maxLevel)) continue;
         if (a.level !== b.level) continue;
         if (used.has(a.id) || used.has(b.id)) continue;
-
         const dx = b.x - a.x;
         const dy = b.y - a.y;
-        const minDist = a.r + b.r + CONTACT_SKIN + 6;
+        const minDist = a.r + b.r + slop;
         if (dx * dx + dy * dy <= minDist * minDist) {
           pairs.push(a.id < b.id ? [a, b] : [b, a]);
           used.add(a.id);

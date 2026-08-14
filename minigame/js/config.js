@@ -22,13 +22,13 @@ const GameConfig = {
   menuLeft: 720,
 
   /**
-   * 对齐旧 Cocos Box2D 手感（GameConfig.gravity = 960，预制体 restitution 0、friction 0.2）。
-   * 下落以重力为主，初速只轻轻一送；弹力留给砸地/砸稳堆，猫与猫不互弹。
+   * 与旧 Cocos Box2D 一致：gravity (0,-960) y-up，像素/米 32。
+   * 本坐标系 y 向下，故用 +960。投放初速 10（Cocos linearVelocity.y）。
    */
-  gravity: 1080,
-  restitution: 0.12,
+  gravity: 960,
+  restitution: 0,
   friction: 0.2,
-  dropVy: 80,
+  dropVy: 10,
 
   dropCooldown: 0.4,
   maxLevel: 10,
