@@ -100,6 +100,9 @@ class Game {
     audio.setEnabled(this.settings.sound);
 
     storage.bindOnHide(() => this.highScore);
+    storage.bindCloudScore((score) => {
+      if (score > this.highScore) this.highScore = score;
+    });
   }
 
   resetMatch() {

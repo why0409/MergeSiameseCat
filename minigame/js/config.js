@@ -23,7 +23,7 @@ const GameConfig = {
 
   gravity: 2200,
   restitution: 0.22,
-  friction: 0.2,
+  friction: 0.1,
   dropVy: 180,
 
   dropCooldown: 0.4,

@@ -26,6 +26,54 @@ function setHighScore(score) {
   } catch (_) { /* ignore */ }
 }
 
+/**
+ * 删除小程序会清本地存储，托管分还在。启动时把云端更高的分写回本地。
+ * @param {(score: number) => void} [onScore]
+ */
+function restoreHighScoreFromCloud(onScore) {
+  const local = getHighScore();
+  const done = (score) => {
+    if (typeof onScore === 'function') onScore(score);
+  };
+  if (!isWx || !wx.getUserCloudStorage) {
+    done(local);
+    return;
+  }
+  try {
+    wx.getUserCloudStorage({
+      keyList: [GameConfig.cloudScoreKey],
+      success: (res) => {
+        let cloud = 0;
+        const list = (res && res.KVDataList) || [];
+        for (let i = 0; i < list.length; i++) {
+          if (list[i] && list[i].key === GameConfig.cloudScoreKey) {
+            cloud = parseInt(list[i].value, 10) || 0;
+            break;
+          }
+        }
+        const best = Math.max(local, cloud);
+        if (best > local) setHighScore(best);
+        done(best);
+      },
+      fail: () => done(local),
+    });
+  } catch (_) {
+    done(local);
+  }
+}
+
+let _onShowRestore = null;
+
+function bindCloudScore(onScore) {
+  restoreHighScoreFromCloud(onScore);
+  if (!isWx || !wx.onShow) return;
+  if (_onShowRestore && wx.offShow) {
+    try { wx.offShow(_onShowRestore); } catch (_) { /* ignore */ }
+  }
+  _onShowRestore = () => restoreHighScoreFromCloud(onScore);
+  wx.onShow(_onShowRestore);
+}
+
 /** 是否有未成功上云的破纪录分 */
 let dirty = false;
 
@@ -147,6 +195,8 @@ function setSettings(partial) {
 module.exports = {
   getHighScore,
   setHighScore,
+  restoreHighScoreFromCloud,
+  bindCloudScore,
   markCloudDirty,
   syncScoreToCloud,
   bindOnHide,

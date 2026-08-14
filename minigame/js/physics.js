@@ -6,8 +6,8 @@ const GameConfig = require('./config');
 
 let _id = 1;
 
-const SLEEP_VEL = 20;
-const SLEEP_TIME = 0.1;
+const SLEEP_VEL = 18;
+const SLEEP_TIME = 0.22;
 const WAKE_IMPULSE = 90;
 /** 碰撞比绘制略胖，贴紧时圆边不咬合 */
 const CONTACT_SKIN = 1.6;
@@ -32,6 +32,7 @@ function createBody(opts) {
     life: 0,
     sleeping: false,
     sleepTimer: 0,
+    fallGrace: 0,
   };
   recomputeInvMass(b);
   return b;
@@ -45,6 +46,8 @@ function wakeBody(b) {
   if (!b || b.static || b.held || b.merging) return;
   b.sleeping = false;
   b.sleepTimer = 0;
+  // 合成留洞后给一段自由落体，避免刚唤醒就被当成「站稳」冻在半空
+  b.fallGrace = Math.max(b.fallGrace || 0, 0.4);
 }
 
 class PhysicsWorld {
@@ -175,7 +178,11 @@ class PhysicsWorld {
 
         const dx = b.x - a.x;
         const dy = b.y - a.y;
-        const minDist = a.r + b.r + minGap;
+        // 同级可合成：不要用皮肤间距推开，否则锁定结束就碰不上
+        const mergeable = a.level === b.level
+          && a.level < GameConfig.maxLevel
+          && !a.merging && !b.merging;
+        const minDist = a.r + b.r + (mergeable ? 0.15 : minGap);
         const distSq = dx * dx + dy * dy;
         if (distSq >= minDist * minDist || distSq < 1e-12) continue;
 
@@ -247,11 +254,11 @@ class PhysicsWorld {
 
       if (b.y + b.r >= floor - 0.5) {
         if (b.vy > 0) {
-          // 重力主导：快碰才弹一下，随后能量按 e² 衰减
           b.vy = b.vy < 75 ? 0 : -b.vy * rest;
         }
-        if (Math.abs(b.vx) > 3) b.vx *= (1 - fric * 0.7);
-        else b.vx = 0;
+        // 地板只轻擦，快停住才刹，否则像粘在地上爬
+        if (Math.abs(b.vx) < 14) b.vx *= 0.82;
+        else b.vx *= 0.992;
       }
 
       if (b.y - b.r <= 8.5 && b.vy < 0) b.vy = 0;
@@ -285,7 +292,24 @@ class PhysicsWorld {
         if (velN > 0.3) continue;
 
         const impact = Math.abs(velN);
-        // 砸到已经稳住的支撑才弹；整列一起下沉不弹，避免堆里抖
+        const spdA = Math.hypot(a.vx, a.vy);
+        const spdB = Math.hypot(b.vx, b.vy);
+        // 堆里慢速互挤：只消闭合，不加摩擦，否则整堆一起抖、滑不动
+        if (spdA < 42 && spdB < 42) {
+          if (velN < -1) {
+            const jn = -velN / (invA + invB);
+            if (invA > 0) {
+              a.vx -= jn * nx * invA;
+              a.vy -= jn * ny * invA;
+            }
+            if (invB > 0) {
+              b.vx += jn * nx * invB;
+              b.vy += jn * ny * invB;
+            }
+          }
+          continue;
+        }
+
         const aLand = a.vy > 140 && (b.sleeping || Math.abs(b.vy) < 30) && b.y > a.y + 10;
         const bLand = b.vy > 140 && (a.sleeping || Math.abs(a.vy) < 30) && a.y > b.y + 10;
         const canBounce = (aLand || bLand) && impact >= REST_IMPACT;
@@ -309,9 +333,8 @@ class PhysicsWorld {
         const tx = -ny;
         const ty = nx;
         const velT = (b.vx - a.vx) * tx + (b.vy - a.vy) * ty;
-        const fricScale = canBounce ? (fric * 0.7) : 1;
-        let jt = -velT / (invA + invB) * fricScale;
-        const maxF = Math.abs(jn) * (canBounce ? fric : 1);
+        let jt = -velT / (invA + invB) * (fric * 0.28);
+        const maxF = Math.abs(jn) * fric;
         if (jt > maxF) jt = maxF;
         if (jt < -maxF) jt = -maxF;
         if (invA > 0) {
@@ -345,11 +368,20 @@ class PhysicsWorld {
         continue;
       }
 
-      const supported = this._canSleep(b);
+      if ((b.fallGrace || 0) > 0) {
+        b.fallGrace -= dt;
+        // 自由落体：不刹下速、不休眠
+        continue;
+      }
+
+      const supported = this._isWellSupported(b);
       if (supported) {
-        if (Math.abs(b.vx) < 120) b.vx *= 0.78;
-        // 已经压在支撑上：消掉向下的余速，否则会每帧砸进去再被顶出来（重叠+抖动）
-        if (b.vy > 0) b.vy = 0;
+        // 横向：只有快停住才刹，滑动中几乎不减速
+        if (Math.abs(b.vx) < 16) b.vx *= 0.84;
+      }
+      // 压在别的猫/地上时，消掉往里钻的下速（不碰横向，避免粘住）
+      if (this._isOnSomething(b) && b.vy > 0 && b.vy < 160) {
+        b.vy = b.vy < 50 ? 0 : 18;
       }
 
       const spd = Math.hypot(b.vx, b.vy);
@@ -360,10 +392,10 @@ class PhysicsWorld {
       }
 
       if (Math.abs(b.vx) < 2.5) b.vx = 0;
-      if (supported && Math.abs(b.vy) < 6) b.vy = 0;
+      if (supported && b.vy > 0 && b.vy < 8) b.vy = 0;
 
       const still = Math.abs(b.vx) < SLEEP_VEL && Math.abs(b.vy) < SLEEP_VEL;
-      if (still && supported) {
+      if (still && this._isWellSupported(b)) {
         b.sleepTimer += dt;
         if (b.sleepTimer >= SLEEP_TIME) {
           b.sleeping = true;
@@ -377,8 +409,25 @@ class PhysicsWorld {
     }
   }
 
-  /** 地面，或接触点法向朝下（压在另一只猫上） */
-  _canSleep(b) {
+  /** 是否压着另一只猫或地面（侧上方也算），用来消掉往里钻的下速 */
+  _isOnSomething(b) {
+    if (b.y + b.r >= this.floor - 1.2) return true;
+    const bodies = this.bodies;
+    for (let i = 0; i < bodies.length; i++) {
+      const o = bodies[i];
+      if (o === b || o.merging || o.held) continue;
+      const dx = o.x - b.x;
+      const dy = o.y - b.y;
+      const minDist = o.r + b.r + CONTACT_SKIN + 2;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > minDist * minDist || distSq < 1e-12) continue;
+      if (dy / Math.sqrt(distSq) > 0.22) return true;
+    }
+    return false;
+  }
+
+  /** 是否压在较稳的支撑上（地面，或正下方的猫）。侧碰/轻擦不算。 */
+  _isWellSupported(b) {
     const floor = this.floor;
     if (b.y + b.r >= floor - 1.2) return true;
 
@@ -392,7 +441,8 @@ class PhysicsWorld {
       const distSq = dx * dx + dy * dy;
       if (distSq > minDist * minDist || distSq < 1e-12) continue;
       const ny = dy / Math.sqrt(distSq);
-      if (ny > 0.18) return true;
+      // 对方要明显在下方，贴墙叠成一列时可以继续往下滑
+      if (ny > 0.55) return true;
     }
     return false;
   }
@@ -414,7 +464,7 @@ class PhysicsWorld {
 
         const dx = b.x - a.x;
         const dy = b.y - a.y;
-        const minDist = a.r + b.r + 2;
+        const minDist = a.r + b.r + CONTACT_SKIN + 6;
         if (dx * dx + dy * dy <= minDist * minDist) {
           pairs.push(a.id < b.id ? [a, b] : [b, a]);
           used.add(a.id);
