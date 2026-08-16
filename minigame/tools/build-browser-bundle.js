@@ -13,6 +13,7 @@ const files = [
   'js/storage.js',
   'js/assets.js',
   'js/audio.js',
+  'js/share.js',
   'js/device.js',
   'js/vendor/planck.js',
   'js/physics.js',

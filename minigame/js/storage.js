@@ -41,18 +41,23 @@ function restoreHighScoreFromCloud(onScore) {
   }
   try {
     wx.getUserCloudStorage({
-      keyList: [GameConfig.cloudScoreKey],
+      keyList: [GameConfig.cloudScoreKey, GameConfig.svipCloudKey || 'svip'],
       success: (res) => {
         let cloud = 0;
+        let svipOn = false;
         const list = (res && res.KVDataList) || [];
         for (let i = 0; i < list.length; i++) {
-          if (list[i] && list[i].key === GameConfig.cloudScoreKey) {
-            cloud = parseInt(list[i].value, 10) || 0;
-            break;
+          const row = list[i];
+          if (!row) continue;
+          if (row.key === GameConfig.cloudScoreKey) {
+            cloud = parseInt(row.value, 10) || 0;
+          } else if (row.key === (GameConfig.svipCloudKey || 'svip')) {
+            svipOn = String(row.value) === '1';
           }
         }
         const best = Math.max(local, cloud);
         if (best > local) setHighScore(best);
+        if (svipOn && !getSettings().goldName) setSettings({ goldName: true });
         done(best);
       },
       fail: () => done(local),
@@ -102,7 +107,7 @@ function syncScoreToCloud(highScore, opt) {
     return;
   }
 
-  const svip = !!(opts.svip != null ? opts.svip : getSettings().goldName);
+  const svip = !!(opts.svip != null ? opts.svip : isGoldActive());
   wx.setUserCloudStorage({
     KVDataList: [
       { key: GameConfig.cloudScoreKey, value: String(score) },
@@ -162,6 +167,11 @@ const DEFAULT_SETTINGS = {
   goldName: false,
 };
 
+function isGoldActive(s) {
+  const st = s || getSettings();
+  return !!st.goldName;
+}
+
 function _readRaw(key) {
   try {
     if (isWx && wx.getStorageSync) return wx.getStorageSync(key);
@@ -211,4 +221,5 @@ module.exports = {
   setGuideSeen,
   getSettings,
   setSettings,
+  isGoldActive,
 };

@@ -1,8 +1,7 @@
 /**
- * Box2D（Planck.js）封装，对齐旧 Cocos PhysicsSystem2D 手感
- * Cocos：gravity (0,-960) y-up，像素/米=32 → 30 m/s²
- * 猫：density 1、friction 0.2、restitution 0；墙/地 friction 0.5、restitution 0.1
- * 圆盘锁旋转（画面不转），碰撞求解仍是 Box2D
+ * Box2D（Planck.js）封装，对齐旧 Cocos PhysicsSystem2D
+ * Cocos：gravity (0,-960) y-up，像素/米=32；猫 density 1、可旋转
+ * 打开旋转 + 轻弹力，避免锁旋转后往上堆成柱、没有撞击感
  */
 const GameConfig = require('./config');
 const planck = require('./vendor/planck');
@@ -28,6 +27,8 @@ function createBody(opts) {
     y: opts.y,
     vx: opts.vx || 0,
     vy: opts.vy || 0,
+    angle: opts.angle || 0,
+    omega: opts.omega || 0,
     r: opts.r,
     level: opts.level,
     mass: Math.max(0.6, (opts.r * opts.r) / 1024),
@@ -51,9 +52,28 @@ function recomputeInvMass(b) {
     return;
   }
   syncType(b);
-  if (!b.held && !b.merging && !b.static) {
+  applyMotion(b);
+}
+
+function applyMotion(b) {
+  if (!b || !b._b2 || b.held || b.merging || b.static) return;
+  b._b2.setLinearVelocity(planck.Vec2(toM(b.vx), toM(b.vy)));
+  b._b2.setAngularVelocity(b.omega || 0);
+  b._b2.setAwake(true);
+}
+
+/**
+ * 只在贴地面时轻轻收横移，猫与猫之间不减速，避免胶粘。
+ * 不把速度打成 0，否则会像被钉住。
+ */
+function settleOnFloor(b, floor) {
+  if (!b || b.y + b.r < floor - 5) return;
+  if (Math.abs(b.vy) > 50) return;
+  b.vx *= 0.97;
+  b.omega = (b.omega || 0) * 0.97;
+  if (b._b2) {
     b._b2.setLinearVelocity(planck.Vec2(toM(b.vx), toM(b.vy)));
-    b._b2.setAwake(true);
+    b._b2.setAngularVelocity(b.omega);
   }
 }
 
@@ -79,8 +99,9 @@ function syncType(b) {
 
 function pushToBox(b) {
   if (!b._b2) return;
-  b._b2.setTransform(planck.Vec2(toM(b.x), toM(b.y)), b._b2.getAngle());
+  b._b2.setTransform(planck.Vec2(toM(b.x), toM(b.y)), b.angle || 0);
   b._b2.setLinearVelocity(planck.Vec2(toM(b.vx), toM(b.vy)));
+  b._b2.setAngularVelocity(b.omega || 0);
 }
 
 function pullFromBox(b) {
@@ -91,6 +112,8 @@ function pullFromBox(b) {
   const v = b._b2.getLinearVelocity();
   b.vx = toP(v.x);
   b.vy = toP(v.y);
+  b.angle = b._b2.getAngle();
+  b.omega = b._b2.getAngularVelocity();
   b.sleeping = !b._b2.isAwake();
 }
 
@@ -126,7 +149,7 @@ class PhysicsWorld {
     this._walls = this._world.createBody({ type: 'static' });
     const wallFix = {
       density: 1,
-      friction: 0.5,
+      friction: 0.55,
       restitution: 0.1,
       filterCategoryBits: WALL_BIT,
       filterMaskBits: CAT_BIT,
@@ -164,20 +187,22 @@ class PhysicsWorld {
     const b2 = this._world.createBody({
       type,
       position: planck.Vec2(toM(body.x), toM(body.y)),
+      angle: body.angle || 0,
       linearVelocity: planck.Vec2(toM(body.vx || 0), toM(body.vy || 0)),
+      angularVelocity: body.omega || 0,
       allowSleep: true,
       awake: true,
-      fixedRotation: true,
+      fixedRotation: false,
       bullet: false,
       linearDamping: 0,
-      angularDamping: 0,
+      angularDamping: GameConfig.angularDamping || 0.35,
       gravityScale: 1,
     });
     const locked = type !== 'dynamic';
     const fix = b2.createFixture(planck.Circle(toM(body.r)), {
       density: 1,
-      friction: 0.2,
-      restitution: 0,
+      friction: GameConfig.friction != null ? GameConfig.friction : 0.12,
+      restitution: GameConfig.restitution != null ? GameConfig.restitution : 0.08,
       filterCategoryBits: CAT_BIT,
       filterMaskBits: locked ? 0 : (CAT_BIT | WALL_BIT),
     });
@@ -213,23 +238,60 @@ class PhysicsWorld {
     for (let i = 0; i < this.bodies.length; i++) wakeBody(this.bodies[i]);
   }
 
+  /**
+   * 把 body 从其它圆里拨开（优先往上），避免投放/合成时嵌进去再被位置修正弹飞。
+   */
+  unstick(body) {
+    if (!body || body.held) return;
+    const left = this.left;
+    const right = this.right;
+    const floor = this.floor;
+    for (let k = 0; k < 8; k++) {
+      let moved = false;
+      for (let i = 0; i < this.bodies.length; i++) {
+        const o = this.bodies[i];
+        if (!o || o === body || o.held || o.merging) continue;
+        const dx = body.x - o.x;
+        const dy = body.y - o.y;
+        const min = body.r + o.r + 0.8;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= min * min) continue;
+        const d = Math.sqrt(d2);
+        if (d < 1e-4) {
+          body.y = o.y - min;
+        } else {
+          const pen = min - d;
+          body.x += (dx / d) * pen;
+          body.y += (dy / d) * pen;
+        }
+        body.x = Math.max(left + body.r, Math.min(right - body.r, body.x));
+        if (body.y + body.r > floor) body.y = floor - body.r;
+        moved = true;
+      }
+      if (!moved) break;
+    }
+    if (body._b2) pushToBox(body);
+  }
+
   step(dt) {
     const bodies = this.bodies;
     for (let i = 0; i < bodies.length; i++) {
       const b = bodies[i];
       if (!b._b2) continue;
       if (b.held || b.merging) {
-        b._b2.setTransform(planck.Vec2(toM(b.x), toM(b.y)), 0);
+        b._b2.setTransform(planck.Vec2(toM(b.x), toM(b.y)), b.held ? 0 : (b.angle || 0));
         b._b2.setLinearVelocity(planck.Vec2(0, 0));
+        b._b2.setAngularVelocity(0);
       }
     }
 
-    this._world.step(dt, 8, 3);
+    this._world.step(dt, 10, 6);
 
     for (let i = 0; i < bodies.length; i++) {
       const b = bodies[i];
       if (!b._b2 || b.held || b.merging) continue;
       pullFromBox(b);
+      settleOnFloor(b, this.floor);
     }
   }
 

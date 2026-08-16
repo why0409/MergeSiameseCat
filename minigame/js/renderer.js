@@ -375,7 +375,7 @@ class Renderer {
       const b = bodies[i];
       if (b.merging) continue;
       const sc = b.spawnAnim != null ? 0.28 + 0.72 * this._easeOutBack(b.spawnAnim) : 1;
-      this._drawCat(ctx, b.x, b.y, b.r * sc, b.level, b.held, b.mergeGlow || 0);
+      this._drawCat(ctx, b.x, b.y, b.r * sc, b.level, b.held, b.mergeGlow || 0, b.held ? 0 : b.angle);
     }
     for (let i = 0; i < bodies.length; i++) {
       const b = bodies[i];
@@ -384,7 +384,7 @@ class Renderer {
       if (sc < 0.05) continue;
       ctx.save();
       ctx.globalAlpha = Math.max(0.2, sc);
-      this._drawCat(ctx, b.x, b.y, b.r * sc, b.level, false, 0.45);
+      this._drawCat(ctx, b.x, b.y, b.r * sc, b.level, false, 0.45, b.angle);
       ctx.restore();
     }
     this._drawMergeReveal(ctx, game);
@@ -412,7 +412,7 @@ class Renderer {
     return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
   }
 
-  _drawCat(ctx, x, y, r, level, held, glow) {
+  _drawCat(ctx, x, y, r, level, held, glow, angle) {
     // 合成光晕
     if (glow > 0.02) {
       ctx.save();
@@ -425,23 +425,26 @@ class Renderer {
     }
 
     const img = assets.getCatImage(level);
+    const rot = held ? 0 : (angle || 0);
     ctx.save();
+    ctx.translate(x, y);
+    if (rot) ctx.rotate(rot);
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
 
     if (img) {
-      ctx.drawImage(img, x - r, y - r, r * 2, r * 2);
+      ctx.drawImage(img, -r, -r, r * 2, r * 2);
     } else {
       const hue = 30 + level * 12;
       ctx.fillStyle = `hsl(${hue}, 45%, ${70 - level * 2}%)`;
-      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      ctx.fillRect(-r, -r, r * 2, r * 2);
       ctx.fillStyle = T.chocolate;
       ctx.font = `${Math.max(14, r * 0.45)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(level), x, y);
+      ctx.fillText(String(level), 0, 0);
     }
     ctx.restore();
 
@@ -619,7 +622,8 @@ class Renderer {
     ctx.fillStyle = T.overlay;
     ctx.fillRect(0, 0, GameConfig.designWidth, GameConfig.designHeight);
 
-    const { cx, cy, cw, ch } = this._panelBox(560, 640);
+    const fromPlay = game._settingsReturn === State.PLAYING;
+    const { cx, cy, cw, ch } = this._panelBox(560, fromPlay ? 730 : 640);
     this._drawCard(ctx, cx, cy, cw, ch);
 
     ctx.fillStyle = T.chocolate;
@@ -636,7 +640,19 @@ class Renderer {
     ctx.font = '20px sans-serif';
     ctx.fillText('开启后排行榜显示金色名字与 SVIP', GameConfig.designWidth / 2, cy + 410);
 
-    this._drawButton(ctx, 'btn_settings_close', cx + 100, cy + 460, 360, 64, '返回', true);
+    this._drawButton(
+      ctx,
+      'btn_settings_close',
+      cx + 100,
+      cy + 460,
+      360,
+      64,
+      fromPlay ? '继续游戏' : '返回',
+      true,
+    );
+    if (fromPlay) {
+      this._drawButton(ctx, 'btn_settings_home', cx + 100, cy + 540, 360, 60, '回到首页', false);
+    }
   }
 
   _drawToggleRow(ctx, hitName, x, y, w, label, on) {
@@ -847,7 +863,7 @@ class Renderer {
     ctx.fillStyle = T.overlay;
     ctx.fillRect(0, 0, GameConfig.designWidth, GameConfig.designHeight);
 
-    const { cx, cy, cw, ch } = this._panelBox(560, 760);
+    const { cx, cy, cw, ch } = this._panelBox(560, 840);
     this._drawCard(ctx, cx, cy, cw, ch);
     // 大暹罗脸
     this._siameseFace(ctx, GameConfig.designWidth / 2, cy + 125, 56);
@@ -875,8 +891,9 @@ class Renderer {
 
     this._drawButton(ctx, 'btn_start', cx + 100, cy + 360, 360, 68, '开始游戏', true);
     this._drawButton(ctx, 'btn_rank', cx + 100, cy + 440, 360, 60, '好友排行', false);
-    this._drawButton(ctx, 'btn_help', cx + 100, cy + 515, 360, 60, '玩法说明', false);
-    this._drawButton(ctx, 'btn_settings', cx + 100, cy + 590, 360, 60, '设置', false);
+    this._drawButton(ctx, 'btn_share', cx + 100, cy + 515, 360, 60, '分享好友', false);
+    this._drawButton(ctx, 'btn_help', cx + 100, cy + 590, 360, 60, '玩法说明', false);
+    this._drawButton(ctx, 'btn_settings', cx + 100, cy + 665, 360, 60, '设置', false);
   }
 
   _drawPlayTip(ctx, game) {
@@ -1108,7 +1125,7 @@ class Renderer {
     ctx.fillStyle = T.overlay;
     ctx.fillRect(0, 0, GameConfig.designWidth, GameConfig.designHeight);
 
-    const { cx, cy, cw, ch } = this._panelBox(520, 660);
+    const { cx, cy, cw, ch } = this._panelBox(520, 740);
     this._drawCard(ctx, cx, cy, cw, ch);
     this._siameseFace(ctx, GameConfig.designWidth / 2, cy + 88, 36);
 
@@ -1126,9 +1143,10 @@ class Renderer {
     ctx.font = '24px sans-serif';
     ctx.fillText(`★ BEST ${game.highScore}`, GameConfig.designWidth / 2, cy + 255);
 
-    this._drawButton(ctx, 'btn_restart', cx + 80, cy + 310, 360, 68, '再来一局', true);
-    this._drawButton(ctx, 'btn_home', cx + 80, cy + 395, 360, 60, '回到首页', false);
-    this._drawButton(ctx, 'btn_rank', cx + 80, cy + 470, 360, 60, '好友排行', false);
+    this._drawButton(ctx, 'btn_restart', cx + 80, cy + 300, 360, 68, '再来一局', true);
+    this._drawButton(ctx, 'btn_share', cx + 80, cy + 384, 360, 60, '分享成绩', false);
+    this._drawButton(ctx, 'btn_home', cx + 80, cy + 458, 360, 60, '回到首页', false);
+    this._drawButton(ctx, 'btn_rank', cx + 80, cy + 532, 360, 60, '好友排行', false);
   }
 
   _drawRankOverlay(ctx, game) {
@@ -1253,7 +1271,7 @@ class Renderer {
       ctx.font = `bold ${Math.round(18 * u)}px sans-serif`;
       ctx.fillText((item.name || '?').slice(0, 1), avX, mid);
 
-      const vip = !!(item.svip || (item.isSelf && game.settings && game.settings.goldName));
+      const vip = !!(item.svip || (item.isSelf && game.goldActive && game.goldActive()));
       const nameX = avX + avR + 12 * u;
       ctx.font = `bold ${Math.round(24 * u)}px sans-serif`;
       ctx.textAlign = 'left';

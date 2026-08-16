@@ -23,12 +23,15 @@ const GameConfig = {
 
   /**
    * 与旧 Cocos Box2D 一致：gravity (0,-960) y-up，像素/米 32。
-   * 本坐标系 y 向下，故用 +960。投放初速 10（Cocos linearVelocity.y）。
+   * 本坐标系 y 向下，故用 +960。
+   * 旧预制体 fixedRotation=false；锁旋转会堆成直柱。给一点弹力才有撞击感。
    */
   gravity: 960,
-  restitution: 0,
-  friction: 0.2,
-  dropVy: 10,
+  restitution: 0.08,
+  /** 猫-猫要滑，别粘；地面摩擦在墙体上另设，用来刹车 */
+  friction: 0.12,
+  dropVy: 80,
+  angularDamping: 0.35,
 
   dropCooldown: 0.4,
   maxLevel: 10,

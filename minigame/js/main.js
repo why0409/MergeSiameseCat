@@ -8,6 +8,7 @@ const Renderer = require('./renderer');
 const assets = require('./assets');
 const audio = require('./audio');
 const { getDeviceLayout } = require('./device');
+const share = require('./share');
 
 const isWx = typeof wx !== 'undefined';
 
@@ -62,6 +63,7 @@ function createInput(canvas, renderer, game) {
 
       if (game.state === State.SETTINGS) {
         if (hit === 'btn_settings_close') game.closeSettings();
+        else if (hit === 'btn_settings_home') game.quitToHome();
         else if (hit === 'tog_vibrate') game.toggleSetting('vibrate');
         else if (hit === 'tog_sound') game.toggleSetting('sound');
         else if (hit === 'tog_gold') game.toggleSetting('goldName');
@@ -78,6 +80,7 @@ function createInput(canvas, renderer, game) {
       else if (hit === 'btn_help') game.openGuide({ from: State.READY, startAfter: false });
       else if (hit === 'btn_settings') game.openSettings(State.READY);
       else if (hit === 'btn_settings_hud') game.openSettings(State.PLAYING);
+      else if (hit === 'btn_share') game.share();
       else if (game.state === State.PLAYING) game.pointerStart(p.x);
     } finally {
       sync();
@@ -202,6 +205,7 @@ function boot() {
   else if (typeof window !== 'undefined') window.addEventListener('resize', layout);
 
   const input = createInput(canvas, renderer, game);
+  share.bind(() => (game.state === State.GAMEOVER ? game.finalScore : game.highScore));
   if (!isWx && typeof window !== 'undefined') {
     window.__game = game;
     window.__renderer = renderer;

@@ -5,6 +5,7 @@ const GameConfig = require('./config');
 const { PhysicsWorld, createBody, recomputeInvMass } = require('./physics');
 const storage = require('./storage');
 const audio = require('./audio');
+const shareApi = require('./share');
 
 const State = {
   LOADING: 'loading',
@@ -102,6 +103,7 @@ class Game {
     storage.bindOnHide(() => this.highScore);
     storage.bindCloudScore((score) => {
       if (score > this.highScore) this.highScore = score;
+      this.settings = storage.getSettings();
     });
   }
 
@@ -254,7 +256,13 @@ class Game {
     const b = this.held;
     b.held = false;
     b.static = false;
-    b.vy = GameConfig.dropVy;
+    // 完全同一 x 会锁成直柱；一点点偏移才能滚成堆
+    b.x += (Math.random() - 0.5) * 10;
+    // 堆到投放点时手持猫会嵌进顶上那只，先拨开再下落，否则像「贴上去」没有撞击
+    this.world.unstick(b);
+    b.vy = Math.max(GameConfig.dropVy || 0, 80);
+    b.vx = (Math.random() - 0.5) * 8;
+    b.omega = (Math.random() - 0.5) * 0.9;
     b.sleeping = false;
     b.sleepTimer = 0;
     recomputeInvMass(b);
@@ -282,6 +290,10 @@ class Game {
   _sfx(name, level) {
     if (!this.settings.sound) return;
     audio.play(name, level);
+  }
+
+  goldActive() {
+    return storage.isGoldActive(this.settings);
   }
 
   update(dt) {
@@ -457,13 +469,15 @@ class Game {
 
     if (nextLevel <= GameConfig.maxLevel) {
       const nb = createBody({
-        x: mx, y: my, r: radiusOf(nextLevel), level: nextLevel, vx: 0, vy: -36,
+        x: mx, y: my, r: radiusOf(nextLevel), level: nextLevel, vx: 0, vy: 24,
+        angle: ((a && a.angle) || 0) * 0.5,
       });
       // 吸收阶段已淡入下一级，这里不再从小弹出，避免闪一下
       nb.spawnAnim = 1;
       nb.mergeGlow = 1;
       nb.mergeLock = GameConfig.mergeLockTime || 0.26;
       this.world.add(nb);
+      this.world.unstick(nb);
     }
   }
 
@@ -646,6 +660,13 @@ class Game {
     this.state = (back === State.SETTINGS) ? State.READY : back;
   }
 
+  /** 对局里提前结束，回到首页 */
+  quitToHome() {
+    this._sfx('ui');
+    storage.syncScoreToCloud(this.highScore, { force: true });
+    this.goHome();
+  }
+
   toggleSetting(key) {
     if (key !== 'vibrate' && key !== 'sound' && key !== 'goldName') return;
     const next = !this.settings[key];
@@ -685,7 +706,7 @@ class Game {
           this._postOpenData({
             command: 'show',
             score,
-            svip: !!this.settings.goldName,
+            svip: this.goldActive(),
           });
         }, 200);
       },
@@ -790,7 +811,7 @@ class Game {
     if (me) {
       me.score = Math.max(me.score, this.highScore);
       me.isSelf = true;
-      me.svip = !!this.settings.goldName;
+      me.svip = this.goldActive();
     }
     items.sort((a, b) => b.score - a.score);
     return items;
@@ -824,6 +845,12 @@ class Game {
 
   restart() {
     this.startPlay();
+  }
+
+  share() {
+    this._sfx('ui');
+    const score = this.state === State.GAMEOVER ? this.finalScore : this.highScore;
+    shareApi.share({ score });
   }
 
   /** 结算后回到首页 */
